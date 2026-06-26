@@ -30,3 +30,4 @@
 - [Docs/MissionEvaluationSystem.md](Docs/MissionEvaluationSystem.md) — 任务评价体系（5维评分 S~D 级 + 结算画面 VR UI 三级递进展示）
 - [Docs/AITeammateBehaviorDesign.md](Docs/AITeammateBehaviorDesign.md) — AI 队友行为系统设计（3层状态 + Behavior Tree + NavMesh）
 - [Docs/HandPoseRecordingLevel.md](Docs/HandPoseRecordingLevel.md) — 手部姿势录制关卡设计（纯黑录制环境 + 5秒倒计时 + 自发光手部材质）
+- [Docs/TutorialModeDesign.md](Docs/TutorialModeDesign.md) — 教程模式设计（4阶段递进教学：手势识别→指挥基础→破门训练→综合考核）
