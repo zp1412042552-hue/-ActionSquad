@@ -31,3 +31,4 @@
 - [Docs/AITeammateBehaviorDesign.md](Docs/AITeammateBehaviorDesign.md) — AI 队友行为系统设计（3层状态 + Behavior Tree + NavMesh）
 - [Docs/HandPoseRecordingLevel.md](Docs/HandPoseRecordingLevel.md) — 手部姿势录制关卡设计（纯黑录制环境 + 5秒倒计时 + 自发光手部材质）
 - [Docs/TutorialModeDesign.md](Docs/TutorialModeDesign.md) — 教程模式设计（4阶段递进教学：手势识别→指挥基础→破门训练→综合考核）
+- [Docs/TutorialLevel_Prompt.md](Docs/TutorialLevel_Prompt.md) — 教程关卡 AI 绘图提示词（4区域全景+特写提示词，含31个可提取建模元素清单）
