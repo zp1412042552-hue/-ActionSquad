@@ -113,9 +113,23 @@ L T0-52-18+51 T1+13-8+30 ...
 
 ### 3.3 录制流程
 
-1. 摆好手势 → 2. 按录制键 → 3. 倒计时 → 4. 采集 1.25 秒数据 → 5. 计算平均值和范围 → 6. 写入 JSON 文件
+Tiny Trouble 的做法是在 VR Preview 中直接录制，而 **Blue-Hand-Command 使用专用的纯黑录制关卡**（详情见 [HandPoseRecordingLevel.md](HandPoseRecordingLevel.md)）。
 
-生成的姿势模板保存在：`Saved/BirdFlightGestures/BirdFlightGestureProfile.json`
+录制流程对比：
+
+| 步骤 | Tiny Trouble | Blue-Hand-Command |
+|------|-------------|-------------------|
+| 环境 | 游戏场景中录制 | 专用纯黑关卡，零视觉干扰 |
+| 倒计时 | 3 秒 | 5 秒 |
+| 采集时长 | 1.25 秒 | 5 秒 |
+| 手部显示 | 默认材质（依赖场景光） | 自发光材质（纯黑可见） |
+| 触发方式 | 键盘 R 键 | 键盘 Space 或指尖点击屏幕 |
+| 录制顺序 | 手动选槽位 | 引导式 1→6 依次录制 |
+
+两者底层机制一致：
+1. 摆好手势 → 2. 按录制键 → 3. 倒计时 → 4. 采集数据 → 5. 计算平均值和范围 → 6. 写入 JSON 文件
+
+生成的姿势模板保存（我们的项目）：`Saved/HandPoseGestures/BlueHandCommandGestureProfile.json`
 
 ---
 

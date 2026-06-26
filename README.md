@@ -29,3 +29,4 @@
 - [Docs/Architecture_TreeDesign.md](Docs/Architecture_TreeDesign.md) — 树形架构设计（GameInstance 树干 + SaveGame 树根 + GameMode 树枝）
 - [Docs/MissionEvaluationSystem.md](Docs/MissionEvaluationSystem.md) — 任务评价体系（5维评分 S~D 级 + 结算画面 VR UI 三级递进展示）
 - [Docs/AITeammateBehaviorDesign.md](Docs/AITeammateBehaviorDesign.md) — AI 队友行为系统设计（3层状态 + Behavior Tree + NavMesh）
+- [Docs/HandPoseRecordingLevel.md](Docs/HandPoseRecordingLevel.md) — 手部姿势录制关卡设计（纯黑录制环境 + 5秒倒计时 + 自发光手部材质）
