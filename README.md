@@ -24,3 +24,7 @@
 ## 项目文档
 
 - [突击小组.txt](突击小组.txt) — 完整项目立项书
+- [Docs/HandGestureSystem_Porting.md](Docs/HandGestureSystem_Porting.md) — 手部姿势识别系统移植方案（来自 Tiny Trouble VR）
+- [Docs/AndroidVR_PerformanceSettings.md](Docs/AndroidVR_PerformanceSettings.md) — Quest VR 性能优化配置（Lumen/Nanite/阴影等关闭项）
+- [Docs/Architecture_TreeDesign.md](Docs/Architecture_TreeDesign.md) — 树形架构设计（GameInstance 树干 + SaveGame 树根 + GameMode 树枝）
+- [Docs/MissionEvaluationSystem.md](Docs/MissionEvaluationSystem.md) — 任务评价体系（5维评分 S~D 级 + 结算画面 VR UI 三级递进展示）
