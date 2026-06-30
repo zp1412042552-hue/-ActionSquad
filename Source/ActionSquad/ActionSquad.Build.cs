@@ -19,6 +19,7 @@ public class ActionSquad : ModuleRules
 			"NavigationSystem",
 			"OculusHandPoseRecognition",
 			"OculusXRInput",
+			"ProceduralMeshComponent",
 			"UMG",
 			"Slate",
 			"SlateCore"

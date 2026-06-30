@@ -84,6 +84,7 @@ void UCommandGestureComponent::ForceRecognizeGesture(ECommandGesture Gesture)
 
 	StableGesture = Gesture;
 	StableGestureSeconds = RequiredHoldSeconds;
+	bStableGestureBroadcasted = true;
 	OnCommandGestureRecognized.Broadcast(Gesture);
 }
 
@@ -142,6 +143,7 @@ void UCommandGestureComponent::UpdateCandidate(ECommandGesture Candidate, float 
 	{
 		StableGesture = ECommandGesture::None;
 		StableGestureSeconds = 0.0f;
+		bStableGestureBroadcasted = false;
 		return;
 	}
 
@@ -149,13 +151,14 @@ void UCommandGestureComponent::UpdateCandidate(ECommandGesture Candidate, float 
 	{
 		StableGesture = Candidate;
 		StableGestureSeconds = 0.0f;
+		bStableGestureBroadcasted = false;
 		return;
 	}
 
 	StableGestureSeconds += FMath::Max(0.0f, DeltaTime);
-	if (StableGestureSeconds >= RequiredHoldSeconds)
+	if (!bStableGestureBroadcasted && StableGestureSeconds >= RequiredHoldSeconds)
 	{
-		StableGestureSeconds = 0.0f;
+		bStableGestureBroadcasted = true;
 		OnCommandGestureRecognized.Broadcast(Candidate);
 	}
 }

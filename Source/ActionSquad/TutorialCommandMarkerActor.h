@@ -7,6 +7,8 @@
 
 class USceneComponent;
 class UTextRenderComponent;
+class UMaterialInterface;
+class UProceduralMeshComponent;
 
 UCLASS(Blueprintable)
 class ACTIONSQUAD_API ATutorialCommandMarkerActor : public AActor
@@ -30,13 +32,30 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<UTextRenderComponent> LabelText;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<UProceduralMeshComponent> RingMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<UProceduralMeshComponent> FillMesh;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (Units = "cm"))
 	float RingRadius = 34.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.5", Units = "cm"))
+	float RingThickness = 4.0f;
+
 private:
+	void RebuildMarkerMeshes();
+	void BuildRingMesh(const FLinearColor& Color);
+	void BuildFillMesh(float Radius, const FLinearColor& Color);
+	FLinearColor ResolveMarkerColor() const;
+
 	FVector MarkerNormal = FVector::UpVector;
 	FVector MarkerForward = FVector::ForwardVector;
 	ESelectedTeamTarget DisplayTarget = ESelectedTeamTarget::None;
 	float HoldProgress = 0.0f;
 	bool bMarkerCanConfirm = false;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> VertexColorMaterial;
 };

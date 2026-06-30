@@ -119,4 +119,5 @@ private:
 	bool bHasRecordedSelectBHandPose = false;
 	bool bHasRecordedSelectAFingerPose = false;
 	bool bHasRecordedSelectBFingerPose = false;
+	bool bStableGestureBroadcasted = false;
 };

@@ -11,6 +11,7 @@
 #include "NavigationSystem.h"
 #include "OculusXRHandComponent.h"
 #include "OculusXRInputFunctionLibrary.h"
+#include "TutorialCommandAimVisualActor.h"
 #include "TutorialCommandMarkerActor.h"
 #include "TutorialInstructionActor.h"
 #include "TutorialDoorActor.h"
@@ -68,6 +69,7 @@ ATutorialPawn::ATutorialPawn()
 	TeamMemberClass = ATutorialTeamMemberActor::StaticClass();
 	TutorialInstructionClass = ATutorialInstructionActor::StaticClass();
 	CommandMarkerClass = ATutorialCommandMarkerActor::StaticClass();
+	CommandAimVisualClass = ATutorialCommandAimVisualActor::StaticClass();
 
 	ConfigureHandVisuals();
 }
@@ -125,6 +127,7 @@ void ATutorialPawn::SelectTeam(ESelectedTeamTarget Target)
 		bCanRearmSameTeamCommand = false;
 		PreviewHoldSeconds = 0.0f;
 		LastPreviewActor.Reset();
+		bHasContinuousFollowTarget = false;
 	}
 
 	CurrentSelectedTeam = Target;
@@ -231,6 +234,21 @@ void ATutorialPawn::SpawnTutorialActors()
 			CommandMarker->HideMarker();
 		}
 	}
+
+	if (!CommandAimVisual && CommandAimVisualClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		CommandAimVisual = World->SpawnActor<ATutorialCommandAimVisualActor>(
+			CommandAimVisualClass,
+			GetActorLocation(),
+			FRotator::ZeroRotator,
+			SpawnParams);
+		if (CommandAimVisual)
+		{
+			CommandAimVisual->HideAim();
+		}
+	}
 }
 
 bool ATutorialPawn::CommandSelectedTeamToPointedLocation()
@@ -270,7 +288,34 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 		CommandGesture->bUseRecognitionZone &&
 		!CommandGesture->bHandInsideRecognitionZone;
 
-	if (MarkerTarget == ESelectedTeamTarget::None || bCommandIssuedSinceSelection || bOutsideRecognitionZone)
+	if (MarkerTarget == ESelectedTeamTarget::None)
+	{
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewActor.Reset();
+		bHasContinuousFollowTarget = false;
+		HideCommandVisuals();
+		return;
+	}
+
+	if (bEnableContinuousPointFollow)
+	{
+		if (bOutsideRecognitionZone || !IsContinuousFollowGestureHeld(MarkerTarget))
+		{
+			StopSelectedTeamMovement(MarkerTarget);
+			PreviewHoldSeconds = 0.0f;
+			LastPreviewActor.Reset();
+			bHasContinuousFollowTarget = false;
+			HideCommandVisuals();
+			return;
+		}
+
+		if (UpdateContinuousPointFollow(DeltaSeconds, MarkerTarget))
+		{
+			return;
+		}
+	}
+
+	if (bCommandIssuedSinceSelection || bOutsideRecognitionZone)
 	{
 		if (bOutsideRecognitionZone && bCommandIssuedSinceSelection)
 		{
@@ -278,10 +323,8 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 		}
 		PreviewHoldSeconds = 0.0f;
 		LastPreviewActor.Reset();
-		if (CommandMarker)
-		{
-			CommandMarker->HideMarker();
-		}
+		bHasContinuousFollowTarget = false;
+		HideCommandVisuals();
 		return;
 	}
 
@@ -290,10 +333,8 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 	{
 		PreviewHoldSeconds = 0.0f;
 		LastPreviewActor.Reset();
-		if (CommandMarker)
-		{
-			CommandMarker->HideMarker();
-		}
+		bHasContinuousFollowTarget = false;
+		HideCommandVisuals();
 		return;
 	}
 
@@ -343,11 +384,139 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 			}
 			PreviewHoldSeconds = 0.0f;
 			LastPreviewActor.Reset();
-			if (CommandMarker)
-			{
-				CommandMarker->HideMarker();
-			}
+			HideCommandVisuals();
 		}
+	}
+}
+
+bool ATutorialPawn::UpdateContinuousPointFollow(float DeltaSeconds, ESelectedTeamTarget MarkerTarget)
+{
+	FVector AimStart = FVector::ZeroVector;
+	FVector AimDirection = FVector::ZeroVector;
+	const bool bHasAimRay = GetCommandAimRay(AimStart, AimDirection);
+
+	FHitResult Hit;
+	if (!TraceCommandTarget(Hit))
+	{
+		if (bDrawContinuousFollowAimLine && bHasAimRay && CommandAimVisual)
+		{
+			CommandAimVisual->ShowAim(MarkerTarget, AimStart, AimStart + AimDirection * CommandTraceDistance, false);
+		}
+		else if (CommandAimVisual)
+		{
+			CommandAimVisual->HideAim();
+		}
+		StopSelectedTeamMovement(MarkerTarget);
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewActor.Reset();
+		bHasContinuousFollowTarget = false;
+		if (CommandMarker)
+		{
+			CommandMarker->HideMarker();
+		}
+		return true;
+	}
+
+	FVector ProjectedTargetLocation = Hit.ImpactPoint;
+	const bool bCanMoveToHit = ProjectCommandHitToNavigation(Hit, ProjectedTargetLocation);
+	if (bDrawContinuousFollowAimLine && bHasAimRay && CommandAimVisual)
+	{
+		CommandAimVisual->ShowAim(MarkerTarget, AimStart, bCanMoveToHit ? ProjectedTargetLocation : Hit.ImpactPoint, bCanMoveToHit);
+	}
+	else if (CommandAimVisual)
+	{
+		CommandAimVisual->HideAim();
+	}
+
+	if (CommandMarker)
+	{
+		CommandMarker->ShowMarker(
+			MarkerTarget,
+			bCanMoveToHit ? ProjectedTargetLocation : Hit.ImpactPoint,
+			Hit.ImpactNormal,
+			GetCommandAimDirection(),
+			bCanMoveToHit ? 1.0f : 0.0f,
+			bCanMoveToHit);
+	}
+
+	if (!bCanMoveToHit)
+	{
+		StopSelectedTeamMovement(MarkerTarget);
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewLocation = Hit.ImpactPoint;
+		LastPreviewActor = Hit.GetActor();
+		bHasContinuousFollowTarget = false;
+		return true;
+	}
+
+	PreviewHoldSeconds = FMath::Max(0.0f, PreviewHoldSeconds - DeltaSeconds);
+	const bool bSameActor = LastPreviewActor.Get() == Hit.GetActor();
+	const bool bFarEnoughFromLastTarget =
+		FVector::DistSquared(LastPreviewLocation, ProjectedTargetLocation) >= FMath::Square(ContinuousFollowRetargetDistance);
+	const bool bReadyToRetarget = PreviewHoldSeconds <= KINDA_SMALL_NUMBER;
+
+	if (bReadyToRetarget && (!bHasContinuousFollowTarget || !bSameActor || bFarEnoughFromLastTarget))
+	{
+		if (IssueCommandAtHit(Hit))
+		{
+			LastPreviewLocation = ProjectedTargetLocation;
+			LastPreviewActor = Hit.GetActor();
+			PreviewHoldSeconds = ContinuousFollowRetargetInterval;
+			bHasContinuousFollowTarget = true;
+		}
+	}
+
+	return true;
+}
+
+bool ATutorialPawn::IsContinuousFollowGestureHeld(ESelectedTeamTarget MarkerTarget) const
+{
+	if (!CommandGesture || !CommandGesture->bHandInsideRecognitionZone)
+	{
+		return false;
+	}
+
+	const FFingerExtensionPose& FingerPose = CommandGesture->LastFingerPose;
+	const bool bIndexExtended = FingerPose.Index >= ContinuousFollowFingerExtendedMin;
+	const bool bMiddleExtended = FingerPose.Middle >= ContinuousFollowFingerExtendedMin;
+	const bool bMiddleCurled = FingerPose.Middle <= ContinuousFollowSecondFingerCurledMax;
+
+	if (MarkerTarget == ESelectedTeamTarget::TeamA)
+	{
+		return bIndexExtended && bMiddleCurled;
+	}
+
+	if (MarkerTarget == ESelectedTeamTarget::TeamB)
+	{
+		return bIndexExtended && bMiddleExtended;
+	}
+
+	return false;
+}
+
+void ATutorialPawn::StopSelectedTeamMovement(ESelectedTeamTarget MarkerTarget)
+{
+	if ((MarkerTarget == ESelectedTeamTarget::TeamA || MarkerTarget == ESelectedTeamTarget::All) && TeamA)
+	{
+		TeamA->StopCommandMovement();
+	}
+
+	if ((MarkerTarget == ESelectedTeamTarget::TeamB || MarkerTarget == ESelectedTeamTarget::All) && TeamB)
+	{
+		TeamB->StopCommandMovement();
+	}
+}
+
+void ATutorialPawn::HideCommandVisuals()
+{
+	if (CommandMarker)
+	{
+		CommandMarker->HideMarker();
+	}
+
+	if (CommandAimVisual)
+	{
+		CommandAimVisual->HideAim();
 	}
 }
 
@@ -430,6 +599,12 @@ bool ATutorialPawn::IsCommandHitConfirmable(const FHitResult& Hit) const
 
 bool ATutorialPawn::IsWalkableCommandHit(const FHitResult& Hit) const
 {
+	FVector ProjectedLocation = FVector::ZeroVector;
+	return ProjectCommandHitToNavigation(Hit, ProjectedLocation);
+}
+
+bool ATutorialPawn::ProjectCommandHitToNavigation(const FHitResult& Hit, FVector& OutProjectedLocation) const
+{
 	if (!Hit.bBlockingHit || Hit.ImpactNormal.Z < WalkableCommandSurfaceMinZ)
 	{
 		return false;
@@ -444,7 +619,13 @@ bool ATutorialPawn::IsWalkableCommandHit(const FHitResult& Hit) const
 
 	FNavLocation ProjectedLocation;
 	const FVector Extent(CommandNavProjectionExtent, CommandNavProjectionExtent, CommandNavProjectionExtent);
-	return NavSystem->ProjectPointToNavigation(Hit.ImpactPoint, ProjectedLocation, Extent);
+	if (!NavSystem->ProjectPointToNavigation(Hit.ImpactPoint, ProjectedLocation, Extent))
+	{
+		return false;
+	}
+
+	OutProjectedLocation = ProjectedLocation.Location;
+	return true;
 }
 
 bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)

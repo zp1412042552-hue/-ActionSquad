@@ -6,6 +6,7 @@
 #include "TutorialPawn.generated.h"
 
 class ATutorialInstructionActor;
+class ATutorialCommandAimVisualActor;
 class ATutorialCommandMarkerActor;
 class ATutorialTeamMemberActor;
 class UCameraComponent;
@@ -80,6 +81,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "s"))
 	float CommandHoldSeconds = 0.5f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
+	bool bEnableContinuousPointFollow = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "s"))
+	float ContinuousFollowRetargetInterval = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "cm"))
+	float ContinuousFollowRetargetDistance = 40.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ContinuousFollowFingerExtendedMin = 0.55f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ContinuousFollowSecondFingerCurledMax = 0.65f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
+	bool bDrawContinuousFollowAimLine = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "cm"))
 	float CommandStableRadius = 18.0f;
 
@@ -91,6 +110,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
 	TSubclassOf<ATutorialCommandMarkerActor> CommandMarkerClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
+	TSubclassOf<ATutorialCommandAimVisualActor> CommandAimVisualClass;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
 	TObjectPtr<ATutorialTeamMemberActor> TeamA;
@@ -105,6 +127,9 @@ public:
 	TObjectPtr<ATutorialCommandMarkerActor> CommandMarker;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialCommandAimVisualActor> CommandAimVisual;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
 	ESelectedTeamTarget CurrentSelectedTeam = ESelectedTeamTarget::None;
 
 private:
@@ -112,11 +137,16 @@ private:
 	void HandleCommandGestureRecognized(ECommandGesture Gesture);
 
 	void UpdateCommandPreview(float DeltaSeconds);
+	bool UpdateContinuousPointFollow(float DeltaSeconds, ESelectedTeamTarget MarkerTarget);
+	bool IsContinuousFollowGestureHeld(ESelectedTeamTarget MarkerTarget) const;
+	void StopSelectedTeamMovement(ESelectedTeamTarget MarkerTarget);
+	void HideCommandVisuals();
 	bool TraceCommandTarget(FHitResult& OutHit) const;
 	bool GetCommandAimRay(FVector& OutStart, FVector& OutDirection) const;
 	FVector GetCommandAimDirection() const;
 	bool IsCommandHitConfirmable(const FHitResult& Hit) const;
 	bool IsWalkableCommandHit(const FHitResult& Hit) const;
+	bool ProjectCommandHitToNavigation(const FHitResult& Hit, FVector& OutProjectedLocation) const;
 	bool IssueCommandAtHit(const FHitResult& Hit);
 	ESelectedTeamTarget GetMarkerTarget() const;
 	void TestSelectA();
@@ -127,6 +157,7 @@ private:
 	FVector LastPreviewLocation = FVector::ZeroVector;
 	TWeakObjectPtr<AActor> LastPreviewActor;
 	float PreviewHoldSeconds = 0.0f;
+	bool bHasContinuousFollowTarget = false;
 	bool bCommandIssuedSinceSelection = false;
 	bool bCanRearmSameTeamCommand = true;
 };

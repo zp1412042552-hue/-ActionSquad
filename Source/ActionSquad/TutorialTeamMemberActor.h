@@ -76,6 +76,9 @@ public:
 	void MoveToCommandLocation(const FVector& WorldLocation);
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Team")
+	void StopCommandMovement();
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Team")
 	void SnapToGround();
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Team")

@@ -101,10 +101,14 @@ void ATutorialTeamMemberActor::InitializeTeamMember(ETeamMemberRole InRole)
 
 void ATutorialTeamMemberActor::SetSelected(bool bInSelected)
 {
+	const bool bSelectionChanged = bSelected != bInSelected;
 	bSelected = bInSelected;
 	RefreshNameplate();
 
-	PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+	if (bSelectionChanged)
+	{
+		PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+	}
 }
 
 void ATutorialTeamMemberActor::PlayTeamAnimation(ETeamMemberAnimState NewState)
@@ -142,8 +146,28 @@ void ATutorialTeamMemberActor::MoveToCommandLocation(const FVector& WorldLocatio
 	StartMoveToLocation(WorldLocation, true);
 }
 
+void ATutorialTeamMemberActor::StopCommandMovement()
+{
+	PendingBreachDoor = nullptr;
+	bHasMoveTarget = false;
+	LowSpeedMoveSeconds = 0.0f;
+
+	if (AAIController* AIController = Cast<AAIController>(GetController()))
+	{
+		AIController->StopMovement();
+	}
+
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+	}
+
+	PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+}
+
 void ATutorialTeamMemberActor::StartMoveToLocation(const FVector& WorldLocation, bool bClearPendingDoor)
 {
+	const bool bAlreadyMovingToCommand = bHasMoveTarget;
 	FVector TargetLocation = WorldLocation;
 	if (bClearPendingDoor)
 	{
@@ -171,7 +195,10 @@ void ATutorialTeamMemberActor::StartMoveToLocation(const FVector& WorldLocation,
 	{
 		Movement->MaxWalkSpeed = MovementSpeed;
 		Movement->MaxStepHeight = StepUpHeight;
-		Movement->StopMovementImmediately();
+		if (!bAlreadyMovingToCommand)
+		{
+			Movement->StopMovementImmediately();
+		}
 	}
 
 	if (AAIController* AIController = Cast<AAIController>(GetController()))
@@ -224,7 +251,8 @@ void ATutorialTeamMemberActor::SnapToGround()
 	FHitResult Hit;
 	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams))
 	{
-		SetActorLocation(Hit.ImpactPoint);
+		const float CapsuleHalfHeight = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 0.0f;
+		SetActorLocation(Hit.ImpactPoint + FVector(0.0f, 0.0f, CapsuleHalfHeight));
 	}
 }
 
