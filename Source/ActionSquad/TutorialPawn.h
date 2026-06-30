@@ -6,6 +6,7 @@
 #include "TutorialPawn.generated.h"
 
 class ATutorialInstructionActor;
+class ATutorialCommandMarkerActor;
 class ATutorialTeamMemberActor;
 class UCameraComponent;
 class UCommandGestureComponent;
@@ -22,6 +23,7 @@ public:
 	ATutorialPawn();
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Tutorial")
@@ -75,6 +77,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
 	float CommandTraceDistance = 1200.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "s"))
+	float CommandHoldSeconds = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "cm"))
+	float CommandStableRadius = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
+	TSubclassOf<ATutorialCommandMarkerActor> CommandMarkerClass;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
 	TObjectPtr<ATutorialTeamMemberActor> TeamA;
 
@@ -85,14 +96,26 @@ public:
 	TObjectPtr<ATutorialInstructionActor> TutorialInstruction;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialCommandMarkerActor> CommandMarker;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
 	ESelectedTeamTarget CurrentSelectedTeam = ESelectedTeamTarget::None;
 
 private:
 	UFUNCTION()
 	void HandleCommandGestureRecognized(ECommandGesture Gesture);
 
+	void UpdateCommandPreview(float DeltaSeconds);
+	bool TraceCommandTarget(FHitResult& OutHit) const;
+	bool IssueCommandAtHit(const FHitResult& Hit);
+	ESelectedTeamTarget GetMarkerTarget() const;
 	void TestSelectA();
 	void TestSelectB();
 	void TestMoveSelectedTeam();
 	void ConfigureHandVisuals();
+
+	FVector LastPreviewLocation = FVector::ZeroVector;
+	TWeakObjectPtr<AActor> LastPreviewActor;
+	float PreviewHoldSeconds = 0.0f;
+	bool bCommandIssuedSinceSelection = false;
 };

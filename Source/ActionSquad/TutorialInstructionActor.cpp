@@ -95,7 +95,7 @@ void ATutorialInstructionActor::BuildDefaultSteps()
 	FCommandTutorialStep SelectA;
 	SelectA.Title = FText::FromString(TEXT("1/5 选择队友 A"));
 	SelectA.Highlight = FText::FromString(TEXT("伸出 1 根手指"));
-	SelectA.Body = FText::FromString(TEXT("保持 0.5 秒，队友 A 头顶牌点亮，并进入警戒姿态。"));
+	SelectA.Body = FText::FromString(TEXT("在识别区内保持 0.5 秒，队友 A 头顶牌会点亮。"));
 	SelectA.FooterHint = FText::FromString(TEXT("测试键：1"));
 	SelectA.RequiredGesture = ECommandGesture::SelectA;
 	SelectA.GestureDisplayIndex = 0;
@@ -104,38 +104,38 @@ void ATutorialInstructionActor::BuildDefaultSteps()
 	FCommandTutorialStep SelectB;
 	SelectB.Title = FText::FromString(TEXT("2/5 选择队友 B"));
 	SelectB.Highlight = FText::FromString(TEXT("伸出 2 根手指"));
-	SelectB.Body = FText::FromString(TEXT("保持 0.5 秒，队友 B 头顶牌点亮，并进入警戒姿态。"));
+	SelectB.Body = FText::FromString(TEXT("在识别区内保持 0.5 秒，队友 B 头顶牌会点亮。"));
 	SelectB.FooterHint = FText::FromString(TEXT("测试键：2"));
 	SelectB.RequiredGesture = ECommandGesture::SelectB;
 	SelectB.GestureDisplayIndex = 1;
 	Steps.Add(SelectB);
 
-	FCommandTutorialStep Action;
-	Action.Title = FText::FromString(TEXT("3/5 行动命令"));
-	Action.Highlight = FText::FromString(TEXT("食指指向目标"));
-	Action.Body = FText::FromString(TEXT("后续会根据射线命中的地面、门或敌人，切换移动、破门或集火。"));
-	Action.FooterHint = FText::FromString(TEXT("下一阶段接入射线命令。"));
-	Action.RequiredGesture = ECommandGesture::Action;
-	Action.GestureDisplayIndex = 2;
-	Steps.Add(Action);
+	FCommandTutorialStep MoveA;
+	MoveA.Title = FText::FromString(TEXT("3/5 移动队友 A"));
+	MoveA.Highlight = FText::FromString(TEXT("再选择 A，指向地面标记"));
+	MoveA.Body = FText::FromString(TEXT("选择 A 后，指向地面上的 A 标记。圆圈投影稳定 0.5 秒后，队友 A 会移动过去。"));
+	MoveA.FooterHint = FText::FromString(TEXT("测试键：1 选择 A，E 直接确认当前指向。"));
+	MoveA.RequiredGesture = ECommandGesture::Action;
+	MoveA.GestureDisplayIndex = 0;
+	Steps.Add(MoveA);
 
-	FCommandTutorialStep Watch;
-	Watch.Title = FText::FromString(TEXT("4/5 警戒命令"));
-	Watch.Highlight = FText::FromString(TEXT("手掌竖起"));
-	Watch.Body = FText::FromString(TEXT("队友就地找掩体，进入高阶戒备并允许自主索敌。"));
-	Watch.FooterHint = FText::FromString(TEXT("下一阶段接入警戒命令。"));
-	Watch.RequiredGesture = ECommandGesture::Watch;
-	Watch.GestureDisplayIndex = 3;
-	Steps.Add(Watch);
+	FCommandTutorialStep MoveB;
+	MoveB.Title = FText::FromString(TEXT("4/5 移动队友 B"));
+	MoveB.Highlight = FText::FromString(TEXT("再选择 B，指向地面标记"));
+	MoveB.Body = FText::FromString(TEXT("选择 B 后，指向地面上的 B 标记。圆圈投影稳定 0.5 秒后，队友 B 会移动过去。"));
+	MoveB.FooterHint = FText::FromString(TEXT("测试键：2 选择 B，E 直接确认当前指向。"));
+	MoveB.RequiredGesture = ECommandGesture::Action;
+	MoveB.GestureDisplayIndex = 1;
+	Steps.Add(MoveB);
 
-	FCommandTutorialStep Recall;
-	Recall.Title = FText::FromString(TEXT("5/5 集合召回"));
-	Recall.Highlight = FText::FromString(TEXT("握拳拉回胸口"));
-	Recall.Body = FText::FromString(TEXT("全队放弃当前任务，回到玩家两侧护卫。"));
-	Recall.FooterHint = FText::FromString(TEXT("下一阶段接入召回路径。"));
-	Recall.RequiredGesture = ECommandGesture::Recall;
-	Recall.GestureDisplayIndex = 4;
-	Steps.Add(Recall);
+	FCommandTutorialStep BreachA;
+	BreachA.Title = FText::FromString(TEXT("5/5 队友 A 踹门"));
+	BreachA.Highlight = FText::FromString(TEXT("选择 A，指向门"));
+	BreachA.Body = FText::FromString(TEXT("选择 A 后，指向门并保持 0.5 秒。队友 A 会走向门并执行破门动作。"));
+	BreachA.FooterHint = FText::FromString(TEXT("命中门时圆圈投影会确认破门目标。"));
+	BreachA.RequiredGesture = ECommandGesture::Action;
+	BreachA.GestureDisplayIndex = 2;
+	Steps.Add(BreachA);
 }
 
 void ATutorialInstructionActor::InitializeWidget()

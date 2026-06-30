@@ -9,6 +9,7 @@
 #include "Materials/MaterialInterface.h"
 #include "MotionControllerComponent.h"
 #include "OculusXRHandComponent.h"
+#include "TutorialCommandMarkerActor.h"
 #include "TutorialInstructionActor.h"
 #include "TutorialDoorActor.h"
 #include "TutorialTeamMemberActor.h"
@@ -18,7 +19,7 @@
 
 ATutorialPawn::ATutorialPawn()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	AutoPossessPlayer = EAutoReceiveInput::Player0;
 
 	BodyCollision = CreateDefaultSubobject<UCapsuleComponent>(TEXT("BodyCollision"));
@@ -64,6 +65,7 @@ ATutorialPawn::ATutorialPawn()
 
 	TeamMemberClass = ATutorialTeamMemberActor::StaticClass();
 	TutorialInstructionClass = ATutorialInstructionActor::StaticClass();
+	CommandMarkerClass = ATutorialCommandMarkerActor::StaticClass();
 
 	ConfigureHandVisuals();
 }
@@ -86,6 +88,12 @@ void ATutorialPawn::BeginPlay()
 	}
 }
 
+void ATutorialPawn::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	UpdateCommandPreview(DeltaSeconds);
+}
+
 void ATutorialPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -104,6 +112,9 @@ void ATutorialPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 void ATutorialPawn::SelectTeam(ESelectedTeamTarget Target)
 {
 	CurrentSelectedTeam = Target;
+	bCommandIssuedSinceSelection = false;
+	PreviewHoldSeconds = 0.0f;
+	LastPreviewActor.Reset();
 
 	if (TeamA)
 	{
@@ -186,9 +197,116 @@ void ATutorialPawn::SpawnTutorialActors()
 			SpawnRotation,
 			SpawnParams);
 	}
+
+	if (!CommandMarker && CommandMarkerClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		CommandMarker = World->SpawnActor<ATutorialCommandMarkerActor>(
+			CommandMarkerClass,
+			GetActorLocation(),
+			FRotator::ZeroRotator,
+			SpawnParams);
+		if (CommandMarker)
+		{
+			CommandMarker->HideMarker();
+		}
+	}
 }
 
 bool ATutorialPawn::CommandSelectedTeamToPointedLocation()
+{
+	FHitResult Hit;
+	return TraceCommandTarget(Hit) && IssueCommandAtHit(Hit);
+}
+
+void ATutorialPawn::HandleCommandGestureRecognized(ECommandGesture Gesture)
+{
+	switch (Gesture)
+	{
+	case ECommandGesture::SelectA:
+		SelectTeam(ESelectedTeamTarget::TeamA);
+		break;
+	case ECommandGesture::SelectB:
+		SelectTeam(ESelectedTeamTarget::TeamB);
+		break;
+	case ECommandGesture::Action:
+		CommandSelectedTeamToPointedLocation();
+		break;
+	default:
+		break;
+	}
+
+	if (TutorialInstruction)
+	{
+		TutorialInstruction->NotifyGesture(Gesture);
+	}
+}
+
+void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
+{
+	const ESelectedTeamTarget MarkerTarget = GetMarkerTarget();
+	if (MarkerTarget == ESelectedTeamTarget::None || bCommandIssuedSinceSelection)
+	{
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewActor.Reset();
+		if (CommandMarker)
+		{
+			CommandMarker->HideMarker();
+		}
+		return;
+	}
+
+	FHitResult Hit;
+	if (!TraceCommandTarget(Hit))
+	{
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewActor.Reset();
+		if (CommandMarker)
+		{
+			CommandMarker->HideMarker();
+		}
+		return;
+	}
+
+	const bool bSameActor = LastPreviewActor.Get() == Hit.GetActor();
+	const bool bSameLocation = FVector::DistSquared(LastPreviewLocation, Hit.ImpactPoint) <= FMath::Square(CommandStableRadius);
+	if (bSameActor && bSameLocation)
+	{
+		PreviewHoldSeconds += FMath::Max(0.0f, DeltaSeconds);
+	}
+	else
+	{
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewLocation = Hit.ImpactPoint;
+		LastPreviewActor = Hit.GetActor();
+	}
+
+	if (CommandMarker)
+	{
+		CommandMarker->ShowMarker(
+			MarkerTarget,
+			Hit.ImpactPoint,
+			Hit.ImpactNormal,
+			CommandHoldSeconds > KINDA_SMALL_NUMBER ? PreviewHoldSeconds / CommandHoldSeconds : 1.0f);
+	}
+
+	if (PreviewHoldSeconds >= CommandHoldSeconds)
+	{
+		if (IssueCommandAtHit(Hit))
+		{
+			bCommandIssuedSinceSelection = true;
+			if (TutorialInstruction)
+			{
+				TutorialInstruction->NotifyGesture(ECommandGesture::Action);
+			}
+			PreviewHoldSeconds = 0.0f;
+			LastPreviewActor.Reset();
+		}
+	}
+}
+
+bool ATutorialPawn::TraceCommandTarget(FHitResult& OutHit) const
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -211,8 +329,13 @@ bool ATutorialPawn::CommandSelectedTeamToPointedLocation()
 	const FVector End = Start + TraceSource->GetForwardVector() * CommandTraceDistance;
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ActionSquadCommandTrace), false, this);
-	FHitResult Hit;
-	if (!World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams))
+	return World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, QueryParams);
+}
+
+bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
+{
+	UWorld* World = GetWorld();
+	if (!World)
 	{
 		return false;
 	}
@@ -255,27 +378,14 @@ bool ATutorialPawn::CommandSelectedTeamToPointedLocation()
 	return bIssuedCommand;
 }
 
-void ATutorialPawn::HandleCommandGestureRecognized(ECommandGesture Gesture)
+ESelectedTeamTarget ATutorialPawn::GetMarkerTarget() const
 {
-	switch (Gesture)
+	if (CurrentSelectedTeam == ESelectedTeamTarget::TeamA || CurrentSelectedTeam == ESelectedTeamTarget::TeamB)
 	{
-	case ECommandGesture::SelectA:
-		SelectTeam(ESelectedTeamTarget::TeamA);
-		break;
-	case ECommandGesture::SelectB:
-		SelectTeam(ESelectedTeamTarget::TeamB);
-		break;
-	case ECommandGesture::Action:
-		CommandSelectedTeamToPointedLocation();
-		break;
-	default:
-		break;
+		return CurrentSelectedTeam;
 	}
 
-	if (TutorialInstruction)
-	{
-		TutorialInstruction->NotifyGesture(Gesture);
-	}
+	return ESelectedTeamTarget::None;
 }
 
 void ATutorialPawn::TestSelectA()
@@ -296,7 +406,10 @@ void ATutorialPawn::TestSelectB()
 
 void ATutorialPawn::TestMoveSelectedTeam()
 {
-	CommandSelectedTeamToPointedLocation();
+	if (CommandSelectedTeamToPointedLocation() && TutorialInstruction)
+	{
+		TutorialInstruction->NotifyGesture(ECommandGesture::Action);
+	}
 }
 
 void ATutorialPawn::ConfigureHandVisuals()
