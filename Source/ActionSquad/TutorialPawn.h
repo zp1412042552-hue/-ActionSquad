@@ -83,6 +83,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "cm"))
 	float CommandStableRadius = 18.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float WalkableCommandSurfaceMinZ = 0.45f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command", meta = (ClampMin = "0.0", Units = "cm"))
+	float CommandNavProjectionExtent = 120.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
 	TSubclassOf<ATutorialCommandMarkerActor> CommandMarkerClass;
 
@@ -109,6 +115,8 @@ private:
 	bool TraceCommandTarget(FHitResult& OutHit) const;
 	bool GetCommandAimRay(FVector& OutStart, FVector& OutDirection) const;
 	FVector GetCommandAimDirection() const;
+	bool IsCommandHitConfirmable(const FHitResult& Hit) const;
+	bool IsWalkableCommandHit(const FHitResult& Hit) const;
 	bool IssueCommandAtHit(const FHitResult& Hit);
 	ESelectedTeamTarget GetMarkerTarget() const;
 	void TestSelectA();
@@ -120,4 +128,5 @@ private:
 	TWeakObjectPtr<AActor> LastPreviewActor;
 	float PreviewHoldSeconds = 0.0f;
 	bool bCommandIssuedSinceSelection = false;
+	bool bCanRearmSameTeamCommand = true;
 };

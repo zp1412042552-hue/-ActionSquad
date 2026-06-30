@@ -2,6 +2,7 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/WidgetComponent.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TutorialCommandWidget.h"
@@ -20,7 +21,7 @@ ATutorialInstructionActor::ATutorialInstructionActor()
 	TutorialWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	TutorialWidgetComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	TutorialWidgetComponent->SetGenerateOverlapEvents(false);
-	TutorialWidgetComponent->SetTwoSided(true);
+	TutorialWidgetComponent->SetTwoSided(false);
 	TutorialWidgetComponent->SetPivot(FVector2D(0.5f, 0.5f));
 	TutorialWidgetComponent->SetBlendMode(EWidgetBlendMode::Transparent);
 
@@ -31,7 +32,11 @@ ATutorialInstructionActor::ATutorialInstructionActor()
 void ATutorialInstructionActor::BeginPlay()
 {
 	Super::BeginPlay();
-	InitializeWidget();
+	RemoveDuplicateInstructionActors();
+	if (IsActorBeingDestroyed())
+	{
+		return;
+	}
 	StartTutorial();
 }
 
@@ -87,10 +92,7 @@ void ATutorialInstructionActor::SetCurrentStep(int32 StepIndex)
 
 void ATutorialInstructionActor::BuildDefaultSteps()
 {
-	if (Steps.Num() > 0)
-	{
-		return;
-	}
+	Steps.Reset();
 
 	FCommandTutorialStep SelectA;
 	SelectA.Title = FText::FromString(TEXT("1/5 选择队友 A"));
@@ -136,6 +138,39 @@ void ATutorialInstructionActor::BuildDefaultSteps()
 	BreachA.RequiredGesture = ECommandGesture::Action;
 	BreachA.GestureDisplayIndex = 2;
 	Steps.Add(BreachA);
+}
+
+void ATutorialInstructionActor::RemoveDuplicateInstructionActors()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	for (TActorIterator<ATutorialInstructionActor> It(World); It; ++It)
+	{
+		ATutorialInstructionActor* Other = *It;
+		if (!Other || Other == this)
+		{
+			continue;
+		}
+
+		if (Other->GetUniqueID() < GetUniqueID())
+		{
+			Destroy();
+			return;
+		}
+	}
+
+	for (TActorIterator<ATutorialInstructionActor> It(World); It; ++It)
+	{
+		ATutorialInstructionActor* Other = *It;
+		if (Other && Other != this)
+		{
+			Other->Destroy();
+		}
+	}
 }
 
 void ATutorialInstructionActor::InitializeWidget()

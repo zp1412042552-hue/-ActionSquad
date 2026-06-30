@@ -12,6 +12,7 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "TeamNameplateWidget.h"
 #include "TutorialDoorActor.h"
+#include "TutorialWeaponActor.h"
 #include "UObject/ConstructorHelpers.h"
 
 ATutorialTeamMemberActor::ATutorialTeamMemberActor()
@@ -49,6 +50,8 @@ ATutorialTeamMemberActor::ATutorialTeamMemberActor()
 	NameplateWidget->SetGenerateOverlapEvents(false);
 	NameplateWidget->SetRelativeScale3D(FVector(0.18f));
 
+	WeaponActorClass = ATutorialWeaponActor::StaticClass();
+
 	LoadDefaultAssets();
 }
 
@@ -57,6 +60,7 @@ void ATutorialTeamMemberActor::BeginPlay()
 	Super::BeginPlay();
 	SnapToGround();
 	RefreshNameplate();
+	SpawnAndAttachWeapon();
 	SetSelected(bSelected);
 	PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
 }
@@ -135,7 +139,16 @@ void ATutorialTeamMemberActor::PlayTeamAnimation(ETeamMemberAnimState NewState)
 
 void ATutorialTeamMemberActor::MoveToCommandLocation(const FVector& WorldLocation)
 {
+	StartMoveToLocation(WorldLocation, true);
+}
+
+void ATutorialTeamMemberActor::StartMoveToLocation(const FVector& WorldLocation, bool bClearPendingDoor)
+{
 	FVector TargetLocation = WorldLocation;
+	if (bClearPendingDoor)
+	{
+		PendingBreachDoor = nullptr;
+	}
 
 	if (UWorld* World = GetWorld())
 	{
@@ -179,7 +192,8 @@ void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 	const float DistanceSquared = FVector::DistSquared2D(GetActorLocation(), Door->GetActorLocation());
 	if (DistanceSquared > FMath::Square(DoorBreachDistance))
 	{
-		MoveToCommandLocation(Door->GetActorLocation());
+		PendingBreachDoor = Door;
+		StartMoveToLocation(Door->GetActorLocation(), false);
 		return;
 	}
 
@@ -189,6 +203,7 @@ void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 	}
 
 	bHasMoveTarget = false;
+	PendingBreachDoor = nullptr;
 	SetActorRotation((Door->GetActorLocation() - GetActorLocation()).Rotation());
 	PlayTeamAnimation(ETeamMemberAnimState::BreachKick);
 	Door->BreachFrom(GetActorLocation());
@@ -290,6 +305,57 @@ void ATutorialTeamMemberActor::RefreshNameplate()
 	Widget->SetSelected(bSelected);
 }
 
+void ATutorialTeamMemberActor::SpawnAndAttachWeapon()
+{
+	if (!bSpawnWeapon || EquippedWeapon || !SoldierMesh || !GetWorld())
+	{
+		return;
+	}
+
+	UClass* ClassToSpawn = WeaponActorClass ? WeaponActorClass.Get() : ATutorialWeaponActor::StaticClass();
+	if (!ClassToSpawn)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	EquippedWeapon = GetWorld()->SpawnActor<ATutorialWeaponActor>(
+		ClassToSpawn,
+		GetActorLocation(),
+		GetActorRotation(),
+		SpawnParams);
+
+	if (!EquippedWeapon)
+	{
+		return;
+	}
+
+	const FName AttachSocket = ResolveWeaponAttachSocket();
+	EquippedWeapon->AttachToComponent(
+		SoldierMesh,
+		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+		AttachSocket);
+	EquippedWeapon->SetActorRelativeTransform(FTransform::Identity);
+}
+
+FName ATutorialTeamMemberActor::ResolveWeaponAttachSocket() const
+{
+	if (SoldierMesh && WeaponSocketName != NAME_None && SoldierMesh->DoesSocketExist(WeaponSocketName))
+	{
+		return WeaponSocketName;
+	}
+
+	if (SoldierMesh && FallbackWeaponBoneName != NAME_None && SoldierMesh->GetBoneIndex(FallbackWeaponBoneName) != INDEX_NONE)
+	{
+		return FallbackWeaponBoneName;
+	}
+
+	return NAME_None;
+}
+
 UAnimSequence* ATutorialTeamMemberActor::ResolveAnimation(ETeamMemberAnimState State) const
 {
 	switch (State)
@@ -372,6 +438,18 @@ void ATutorialTeamMemberActor::FinishMoveCommand()
 		Movement->StopMovementImmediately();
 	}
 	SnapToGround();
+
+	if (PendingBreachDoor)
+	{
+		ATutorialDoorActor* DoorToBreach = PendingBreachDoor;
+		PendingBreachDoor = nullptr;
+		if (DoorToBreach && FVector::DistSquared2D(GetActorLocation(), DoorToBreach->GetActorLocation()) <= FMath::Square(DoorBreachDistance * 1.5f))
+		{
+			BreachDoor(DoorToBreach);
+			return;
+		}
+	}
+
 	PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
 }
 

@@ -93,6 +93,7 @@ public:
 
 private:
 	void BuildDefaultSteps();
+	void RemoveDuplicateInstructionActors();
 	void InitializeWidget();
 	void ApplyScreenLayout();
 	void ApplyCurrentStepToWidget();

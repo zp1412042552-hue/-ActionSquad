@@ -8,6 +8,7 @@
 class UAnimSequence;
 class USkeletalMeshComponent;
 class ATutorialDoorActor;
+class ATutorialWeaponActor;
 class UWidgetComponent;
 class UTeamNameplateWidget;
 
@@ -86,6 +87,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<UWidgetComponent> NameplateWidget;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<ATutorialWeaponActor> EquippedWeapon;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Team")
 	ETeamMemberRole TeamRole = ETeamMemberRole::TeamA;
 
@@ -122,6 +126,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Door")
 	float DoorBreachDistance = 120.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon")
+	bool bSpawnWeapon = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon")
+	TSubclassOf<ATutorialWeaponActor> WeaponActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon")
+	FName WeaponSocketName = TEXT("Gun");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon")
+	FName FallbackWeaponBoneName = TEXT("RightHand");
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Animations")
 	FTeamMemberAnimationSet AnimationSet;
 
@@ -137,9 +153,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Movement")
 	FVector MoveTargetLocation = FVector::ZeroVector;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Door")
+	TObjectPtr<ATutorialDoorActor> PendingBreachDoor;
+
 private:
+	void StartMoveToLocation(const FVector& WorldLocation, bool bClearPendingDoor);
 	void LoadDefaultAssets();
 	void RefreshNameplate();
+	void SpawnAndAttachWeapon();
+	FName ResolveWeaponAttachSocket() const;
 	UAnimSequence* ResolveAnimation(ETeamMemberAnimState State) const;
 	void FinishMoveCommand();
 	void UpdateCommandMovement(float DeltaSeconds);

@@ -8,6 +8,7 @@
 #include "InputCoreTypes.h"
 #include "Materials/MaterialInterface.h"
 #include "MotionControllerComponent.h"
+#include "NavigationSystem.h"
 #include "OculusXRHandComponent.h"
 #include "OculusXRInputFunctionLibrary.h"
 #include "TutorialCommandMarkerActor.h"
@@ -112,10 +113,21 @@ void ATutorialPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 void ATutorialPawn::SelectTeam(ESelectedTeamTarget Target)
 {
+	const bool bSameTarget = CurrentSelectedTeam == Target;
+	if (bSameTarget && bCommandIssuedSinceSelection && !bCanRearmSameTeamCommand)
+	{
+		return;
+	}
+
+	if (!bSameTarget || bCommandIssuedSinceSelection)
+	{
+		bCommandIssuedSinceSelection = false;
+		bCanRearmSameTeamCommand = false;
+		PreviewHoldSeconds = 0.0f;
+		LastPreviewActor.Reset();
+	}
+
 	CurrentSelectedTeam = Target;
-	bCommandIssuedSinceSelection = false;
-	PreviewHoldSeconds = 0.0f;
-	LastPreviewActor.Reset();
 
 	if (TeamA)
 	{
@@ -154,6 +166,12 @@ void ATutorialPawn::SpawnTutorialActors()
 		{
 			TeamB = ExistingMember;
 		}
+	}
+
+	for (TActorIterator<ATutorialInstructionActor> It(World); It; ++It)
+	{
+		TutorialInstruction = *It;
+		break;
 	}
 
 	const FRotator SpawnRotation(0.0f, GetActorRotation().Yaw, 0.0f);
@@ -254,6 +272,10 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 
 	if (MarkerTarget == ESelectedTeamTarget::None || bCommandIssuedSinceSelection || bOutsideRecognitionZone)
 	{
+		if (bOutsideRecognitionZone && bCommandIssuedSinceSelection)
+		{
+			bCanRearmSameTeamCommand = true;
+		}
 		PreviewHoldSeconds = 0.0f;
 		LastPreviewActor.Reset();
 		if (CommandMarker)
@@ -275,11 +297,21 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 		return;
 	}
 
-	const bool bSameActor = LastPreviewActor.Get() == Hit.GetActor();
-	const bool bSameLocation = FVector::DistSquared(LastPreviewLocation, Hit.ImpactPoint) <= FMath::Square(CommandStableRadius);
-	if (bSameActor && bSameLocation)
+	const bool bCanConfirmHit = IsCommandHitConfirmable(Hit);
+	if (bCanConfirmHit)
 	{
-		PreviewHoldSeconds += FMath::Max(0.0f, DeltaSeconds);
+		const bool bSameActor = LastPreviewActor.Get() == Hit.GetActor();
+		const bool bSameLocation = FVector::DistSquared(LastPreviewLocation, Hit.ImpactPoint) <= FMath::Square(CommandStableRadius);
+		if (bSameActor && bSameLocation)
+		{
+			PreviewHoldSeconds += FMath::Max(0.0f, DeltaSeconds);
+		}
+		else
+		{
+			PreviewHoldSeconds = 0.0f;
+			LastPreviewLocation = Hit.ImpactPoint;
+			LastPreviewActor = Hit.GetActor();
+		}
 	}
 	else
 	{
@@ -295,20 +327,26 @@ void ATutorialPawn::UpdateCommandPreview(float DeltaSeconds)
 			Hit.ImpactPoint,
 			Hit.ImpactNormal,
 			GetCommandAimDirection(),
-			CommandHoldSeconds > KINDA_SMALL_NUMBER ? PreviewHoldSeconds / CommandHoldSeconds : 1.0f);
+			CommandHoldSeconds > KINDA_SMALL_NUMBER ? PreviewHoldSeconds / CommandHoldSeconds : 1.0f,
+			bCanConfirmHit);
 	}
 
-	if (PreviewHoldSeconds >= CommandHoldSeconds)
+	if (bCanConfirmHit && PreviewHoldSeconds >= CommandHoldSeconds)
 	{
 		if (IssueCommandAtHit(Hit))
 		{
 			bCommandIssuedSinceSelection = true;
+			bCanRearmSameTeamCommand = false;
 			if (TutorialInstruction)
 			{
 				TutorialInstruction->NotifyGesture(ECommandGesture::Action);
 			}
 			PreviewHoldSeconds = 0.0f;
 			LastPreviewActor.Reset();
+			if (CommandMarker)
+			{
+				CommandMarker->HideMarker();
+			}
 		}
 	}
 }
@@ -385,6 +423,30 @@ FVector ATutorialPawn::GetCommandAimDirection() const
 	return GetActorForwardVector();
 }
 
+bool ATutorialPawn::IsCommandHitConfirmable(const FHitResult& Hit) const
+{
+	return Cast<ATutorialDoorActor>(Hit.GetActor()) != nullptr || IsWalkableCommandHit(Hit);
+}
+
+bool ATutorialPawn::IsWalkableCommandHit(const FHitResult& Hit) const
+{
+	if (!Hit.bBlockingHit || Hit.ImpactNormal.Z < WalkableCommandSurfaceMinZ)
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+	const UNavigationSystemV1* NavSystem = World ? FNavigationSystem::GetCurrent<UNavigationSystemV1>(World) : nullptr;
+	if (!NavSystem)
+	{
+		return false;
+	}
+
+	FNavLocation ProjectedLocation;
+	const FVector Extent(CommandNavProjectionExtent, CommandNavProjectionExtent, CommandNavProjectionExtent);
+	return NavSystem->ProjectPointToNavigation(Hit.ImpactPoint, ProjectedLocation, Extent);
+}
+
 bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 {
 	UWorld* World = GetWorld();
@@ -394,6 +456,11 @@ bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 	}
 
 	ATutorialDoorActor* HitDoor = Cast<ATutorialDoorActor>(Hit.GetActor());
+	if (!HitDoor && !IsWalkableCommandHit(Hit))
+	{
+		return false;
+	}
+
 	bool bIssuedCommand = false;
 	if ((CurrentSelectedTeam == ESelectedTeamTarget::TeamA || CurrentSelectedTeam == ESelectedTeamTarget::All) && TeamA)
 	{
