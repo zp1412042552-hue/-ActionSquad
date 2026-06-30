@@ -1,6 +1,7 @@
 #include "CommandGestureComponent.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "GesturePoseProfileSaveGame.h"
@@ -33,6 +34,21 @@ void UCommandGestureComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	if (PollMetaHandPose(PolledHandPose, &PolledPose))
 	{
 		LastFingerPose = PolledPose;
+
+		FVector HandLocation = FVector::ZeroVector;
+		bHandInsideRecognitionZone =
+			!bUseRecognitionZone ||
+			(GetRecognizerHandLocation(HandLocation) && IsHandInsideRecognitionZone(HandLocation));
+
+		if (!bHandInsideRecognitionZone)
+		{
+			LastRecordedHandPoseConfidence = 0.0f;
+			LastRecordedHandPoseError = 0.0f;
+			LastRecordedFingerPoseConfidence = 0.0f;
+			UpdateCandidate(ECommandGesture::None, DeltaTime);
+			return;
+		}
+
 		float BestConfidence = 0.0f;
 		float BestError = 0.0f;
 		float BestFingerConfidence = 0.0f;
@@ -40,10 +56,12 @@ void UCommandGestureComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 		LastRecordedHandPoseConfidence = BestConfidence;
 		LastRecordedHandPoseError = BestError;
 		LastRecordedFingerPoseConfidence = BestFingerConfidence;
+		DrawRecognitionZone(Candidate);
 		UpdateCandidate(Candidate, DeltaTime);
 	}
 	else
 	{
+		bHandInsideRecognitionZone = false;
 		UpdateCandidate(ECommandGesture::None, DeltaTime);
 	}
 }
@@ -265,6 +283,71 @@ bool UCommandGestureComponent::PollMetaHandPose(FHandPose& OutHandPose, FFingerE
 	}
 
 	return true;
+}
+
+bool UCommandGestureComponent::GetRecognizerHandLocation(FVector& OutHandLocation) const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+
+	TArray<UMotionControllerComponent*> MotionControllers;
+	Owner->GetComponents(MotionControllers);
+	for (const UMotionControllerComponent* MotionController : MotionControllers)
+	{
+		if (MotionController && MotionController->GetName().Contains(TEXT("RightHandTrackingRoot")))
+		{
+			OutHandLocation = MotionController->GetComponentLocation();
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UCommandGestureComponent::IsHandInsideRecognitionZone(const FVector& HandLocation) const
+{
+	const UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World ? World->GetFirstPlayerController() : nullptr;
+	const APlayerCameraManager* CameraManager = PlayerController ? PlayerController->PlayerCameraManager : nullptr;
+	if (!CameraManager)
+	{
+		return false;
+	}
+
+	const FTransform CameraTransform(CameraManager->GetCameraRotation(), CameraManager->GetCameraLocation());
+	const FVector LocalHandLocation = CameraTransform.InverseTransformPosition(HandLocation);
+	const FVector Min = RecognitionZoneCenter - RecognitionZoneExtent;
+	const FVector Max = RecognitionZoneCenter + RecognitionZoneExtent;
+
+	return
+		LocalHandLocation.X >= Min.X && LocalHandLocation.X <= Max.X &&
+		LocalHandLocation.Y >= Min.Y && LocalHandLocation.Y <= Max.Y &&
+		LocalHandLocation.Z >= Min.Z && LocalHandLocation.Z <= Max.Z;
+}
+
+void UCommandGestureComponent::DrawRecognitionZone(ECommandGesture Candidate) const
+{
+	if (!bDrawRecognitionZone || !bUseRecognitionZone)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	const APlayerController* PlayerController = World ? World->GetFirstPlayerController() : nullptr;
+	const APlayerCameraManager* CameraManager = PlayerController ? PlayerController->PlayerCameraManager : nullptr;
+	if (!World || !CameraManager)
+	{
+		return;
+	}
+
+	const FTransform CameraTransform(CameraManager->GetCameraRotation(), CameraManager->GetCameraLocation());
+	const FVector BoxCenter = CameraTransform.TransformPosition(RecognitionZoneCenter);
+	const FQuat BoxRotation = CameraTransform.GetRotation();
+	const FColor BoxColor = Candidate == ECommandGesture::None ? FColor(0, 120, 255) : FColor::Cyan;
+	DrawDebugBox(World, BoxCenter, RecognitionZoneExtent, BoxRotation, BoxColor, false, 0.0f, 0, 1.8f);
 }
 
 FRotator UCommandGestureComponent::GetRecognizerWristRotator() const

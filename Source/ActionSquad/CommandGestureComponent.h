@@ -84,11 +84,29 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Gesture")
 	float LastRecordedFingerPoseConfidence = 0.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Recognition Zone")
+	bool bUseRecognitionZone = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Recognition Zone")
+	bool bDrawRecognitionZone = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Recognition Zone", meta = (Units = "cm"))
+	FVector RecognitionZoneCenter = FVector(57.5f, 0.0f, 2.5f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Recognition Zone", meta = (Units = "cm"))
+	FVector RecognitionZoneExtent = FVector(17.5f, 35.0f, 22.5f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Recognition Zone")
+	bool bHandInsideRecognitionZone = false;
+
 private:
 	void LoadRecordedGestureProfile();
 	void UpdateCandidate(ECommandGesture Candidate, float DeltaTime);
 	ECommandGesture ClassifyHandPose(const FHandPose& Pose, const FFingerExtensionPose& FingerPose, float* OutBestConfidence = nullptr, float* OutBestError = nullptr, float* OutBestFingerConfidence = nullptr) const;
 	bool PollMetaHandPose(FHandPose& OutHandPose, FFingerExtensionPose* OutFingerPose) const;
+	bool GetRecognizerHandLocation(FVector& OutHandLocation) const;
+	bool IsHandInsideRecognitionZone(const FVector& HandLocation) const;
+	void DrawRecognitionZone(ECommandGesture Candidate) const;
 	FRotator GetRecognizerWristRotator() const;
 	static float Clamp01(float Value);
 	static float ComputeFingerPoseConfidence(const FFingerExtensionPose& ReferencePose, const FFingerExtensionPose& Pose);
