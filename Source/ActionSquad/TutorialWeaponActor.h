@@ -17,6 +17,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Weapon")
 	FTransform GetMuzzleTransform() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Weapon")
+	FTransform GetShellEjectionTransform() const;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<USceneComponent> SceneRoot;
 
@@ -25,4 +28,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<USceneComponent> MuzzlePoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<USceneComponent> ShellEjectionPoint;
 };

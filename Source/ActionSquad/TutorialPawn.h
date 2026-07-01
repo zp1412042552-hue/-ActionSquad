@@ -8,6 +8,8 @@
 class ATutorialInstructionActor;
 class ATutorialCommandAimVisualActor;
 class ATutorialCommandMarkerActor;
+class ATutorialBallisticEffectActor;
+class ATutorialShellCasingActor;
 class ATutorialTeamMemberActor;
 class ATutorialWeaponActor;
 class UCameraComponent;
@@ -46,6 +48,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Tutorial")
 	bool CommandSelectedTeamToPointedLocation();
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Player Weapon")
+	bool FirePlayerWeapon();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<UCapsuleComponent> BodyCollision;
@@ -98,6 +103,66 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon")
 	TSubclassOf<ATutorialWeaponActor> PlayerWeaponClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing")
+	bool bEnablePlayerWeaponFire = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing", meta = (ClampMin = "0.01", Units = "s"))
+	float PlayerWeaponFireInterval = 0.18f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing", meta = (ClampMin = "0.0", Units = "cm"))
+	float PlayerWeaponRange = 5000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing", meta = (ClampMin = "0.0"))
+	float PlayerWeaponDamage = 35.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing")
+	bool bUseWeaponActorMuzzleForFiring = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing")
+	bool bEnableHandTouchFireInput = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing", meta = (ClampMin = "0.1", Units = "cm"))
+	float HandTouchFireDistance = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing", meta = (ClampMin = "0.1", Units = "cm"))
+	float HandTouchFireReleaseDistance = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|Firing")
+	bool bRequireHighConfidenceHandsForFire = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Player Weapon|Firing")
+	float CurrentHandTouchFireDistance = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	bool bSpawnPlayerWeaponMuzzleFlash = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	bool bSpawnPlayerWeaponBulletTracer = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	bool bSpawnPlayerWeaponImpactEffect = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	bool bSpawnPlayerWeaponShellCasing = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	TSubclassOf<ATutorialBallisticEffectActor> MuzzleFlashEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	TSubclassOf<ATutorialBallisticEffectActor> BulletTracerEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	TSubclassOf<ATutorialBallisticEffectActor> ImpactEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	TSubclassOf<ATutorialShellCasingActor> ShellCasingClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	FVector ShellEjectionLocalVelocity = FVector(-35.0f, 115.0f, 65.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	FVector ShellEjectionAngularVelocityDegrees = FVector(900.0f, 120.0f, 520.0f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement")
 	bool bEnableGunPitchLocomotion = true;
 
@@ -108,16 +173,16 @@ public:
 	float GunBackwardSpeed = 80.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0", Units = "deg"))
-	float GunForwardStartPitch = 45.0f;
+	float GunForwardStartPitch = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0", Units = "deg"))
-	float GunForwardStopPitch = 30.0f;
+	float GunForwardStopPitch = 14.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMax = "0.0", Units = "deg"))
-	float GunBackwardStartPitch = -55.0f;
+	float GunBackwardStartPitch = -50.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMax = "0.0", Units = "deg"))
-	float GunBackwardStopPitch = -30.0f;
+	float GunBackwardStopPitch = -28.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0"))
 	float GunPitchSmoothingSpeed = 12.0f;
@@ -227,6 +292,16 @@ private:
 	void TestSelectB();
 	void TestMoveSelectedTeam();
 	void ConfigurePlayerWeaponComponent();
+	bool GetPlayerWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const;
+	FTransform GetPlayerWeaponShellEjectionTransform(const FTransform& MuzzleTransform) const;
+	void SpawnPlayerWeaponMuzzleFlash(const FTransform& MuzzleTransform);
+	void SpawnPlayerWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation);
+	void SpawnPlayerWeaponImpactEffect(const FHitResult& Hit, bool bBloodImpact);
+	void SpawnPlayerWeaponShellCasing(const FTransform& MuzzleTransform);
+	void UpdateHandTouchFireInput(float DeltaSeconds);
+	bool GetClosestHandBoneDistance(float& OutClosestDistance) const;
+	bool HasValidHandsForTouchFire() const;
+	bool GetHandBoneLocations(const UOculusXRHandComponent* HandMesh, TArray<FVector>& OutLocations) const;
 	void UpdateGunPitchLocomotion(float DeltaSeconds);
 	bool GetGunLocomotionPitch(float& OutPitchDegrees) const;
 	bool HasValidLeftHandTrackingForGunLocomotion() const;
@@ -236,8 +311,10 @@ private:
 	FVector LastPreviewLocation = FVector::ZeroVector;
 	TWeakObjectPtr<AActor> LastPreviewActor;
 	float PreviewHoldSeconds = 0.0f;
+	float LastPlayerWeaponFireTime = -1000.0f;
 	float GunLocomotionStartHoldTimer = 0.0f;
 	bool bHasContinuousFollowTarget = false;
+	bool bHandTouchFireArmed = true;
 	bool bCommandIssuedSinceSelection = false;
 	bool bCanRearmSameTeamCommand = true;
 };

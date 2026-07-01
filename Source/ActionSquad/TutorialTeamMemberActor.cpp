@@ -13,6 +13,7 @@
 #include "TeamNameplateWidget.h"
 #include "TutorialDoorActor.h"
 #include "TutorialWeaponActor.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ATutorialTeamMemberActor::ATutorialTeamMemberActor()
@@ -58,6 +59,8 @@ ATutorialTeamMemberActor::ATutorialTeamMemberActor()
 void ATutorialTeamMemberActor::BeginPlay()
 {
 	Super::BeginPlay();
+	CurrentHealth = FMath::Max(1.0f, MaxHealth);
+	bDead = false;
 	SnapToGround();
 	RefreshNameplate();
 	SpawnAndAttachWeapon();
@@ -68,8 +71,11 @@ void ATutorialTeamMemberActor::BeginPlay()
 void ATutorialTeamMemberActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	UpdateCommandMovement(DeltaSeconds);
-	UpdateMovementAnimation();
+	if (!bDead)
+	{
+		UpdateCommandMovement(DeltaSeconds);
+		UpdateMovementAnimation();
+	}
 
 	if (!NameplateWidget)
 	{
@@ -101,6 +107,11 @@ void ATutorialTeamMemberActor::InitializeTeamMember(ETeamMemberRole InRole)
 
 void ATutorialTeamMemberActor::SetSelected(bool bInSelected)
 {
+	if (bDead)
+	{
+		return;
+	}
+
 	const bool bSelectionChanged = bSelected != bInSelected;
 	bSelected = bInSelected;
 	RefreshNameplate();
@@ -109,6 +120,55 @@ void ATutorialTeamMemberActor::SetSelected(bool bInSelected)
 	{
 		PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
 	}
+}
+
+float ATutorialTeamMemberActor::TakeDamage(
+	float DamageAmount,
+	FDamageEvent const& DamageEvent,
+	AController* EventInstigator,
+	AActor* DamageCauser)
+{
+	const float AppliedDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+	if (!bCanReceivePlayerWeaponDamage || bDead || DamageAmount <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	CurrentHealth = FMath::Clamp(CurrentHealth - DamageAmount, 0.0f, FMath::Max(1.0f, MaxHealth));
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HitReactionTimerHandle);
+	}
+
+	if (CurrentHealth <= KINDA_SMALL_NUMBER)
+	{
+		bDead = true;
+		StopCommandMovement();
+		bHasMoveTarget = false;
+		PendingBreachDoor = nullptr;
+
+		if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+		{
+			Movement->StopMovementImmediately();
+			Movement->DisableMovement();
+		}
+
+		PlayTeamAnimation(ETeamMemberAnimState::Death);
+		return DamageAmount;
+	}
+
+	PlayTeamAnimation(ETeamMemberAnimState::HitReact);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			HitReactionTimerHandle,
+			this,
+			&ATutorialTeamMemberActor::ResumeAfterHitReaction,
+			0.45f,
+			false);
+	}
+
+	return AppliedDamage > 0.0f ? AppliedDamage : DamageAmount;
 }
 
 void ATutorialTeamMemberActor::PlayTeamAnimation(ETeamMemberAnimState NewState)
@@ -143,6 +203,11 @@ void ATutorialTeamMemberActor::PlayTeamAnimation(ETeamMemberAnimState NewState)
 
 void ATutorialTeamMemberActor::MoveToCommandLocation(const FVector& WorldLocation)
 {
+	if (bDead)
+	{
+		return;
+	}
+
 	StartMoveToLocation(WorldLocation, true);
 }
 
@@ -162,11 +227,19 @@ void ATutorialTeamMemberActor::StopCommandMovement()
 		Movement->StopMovementImmediately();
 	}
 
-	PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+	if (!bDead)
+	{
+		PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+	}
 }
 
 void ATutorialTeamMemberActor::StartMoveToLocation(const FVector& WorldLocation, bool bClearPendingDoor)
 {
+	if (bDead)
+	{
+		return;
+	}
+
 	const bool bAlreadyMovingToCommand = bHasMoveTarget;
 	FVector TargetLocation = WorldLocation;
 	if (bClearPendingDoor)
@@ -211,7 +284,7 @@ void ATutorialTeamMemberActor::StartMoveToLocation(const FVector& WorldLocation,
 
 void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 {
-	if (!Door)
+	if (!Door || bDead)
 	{
 		return;
 	}
@@ -483,7 +556,7 @@ void ATutorialTeamMemberActor::FinishMoveCommand()
 
 void ATutorialTeamMemberActor::UpdateMovementAnimation()
 {
-	if (!bHasMoveTarget)
+	if (!bHasMoveTarget || CurrentAnimState == ETeamMemberAnimState::HitReact)
 	{
 		return;
 	}
@@ -496,6 +569,23 @@ void ATutorialTeamMemberActor::UpdateMovementAnimation()
 	else if (CurrentAnimState == ETeamMemberAnimState::Walk && LowSpeedMoveSeconds >= LowSpeedStopSeconds)
 	{
 		FinishMoveCommand();
+	}
+}
+
+void ATutorialTeamMemberActor::ResumeAfterHitReaction()
+{
+	if (bDead)
+	{
+		return;
+	}
+
+	if (bHasMoveTarget)
+	{
+		PlayTeamAnimation(ETeamMemberAnimState::Walk);
+	}
+	else
+	{
+		PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
 	}
 }
 

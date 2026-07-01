@@ -12,13 +12,17 @@
 #include "NavigationSystem.h"
 #include "OculusXRHandComponent.h"
 #include "OculusXRInputFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "TutorialCommandAimVisualActor.h"
 #include "TutorialCommandMarkerActor.h"
+#include "TutorialBallisticEffectActor.h"
 #include "TutorialInstructionActor.h"
 #include "TutorialDoorActor.h"
+#include "TutorialShellCasingActor.h"
 #include "TutorialTeamMemberActor.h"
 #include "TutorialWeaponActor.h"
 #include "EngineUtils.h"
+#include "GameFramework/DamageType.h"
 #include "DrawDebugHelpers.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -86,6 +90,10 @@ ATutorialPawn::ATutorialPawn()
 	CommandMarkerClass = ATutorialCommandMarkerActor::StaticClass();
 	CommandAimVisualClass = ATutorialCommandAimVisualActor::StaticClass();
 	PlayerWeaponClass = ATutorialWeaponActor::StaticClass();
+	MuzzleFlashEffectClass = ATutorialBallisticEffectActor::StaticClass();
+	BulletTracerEffectClass = ATutorialBallisticEffectActor::StaticClass();
+	ImpactEffectClass = ATutorialBallisticEffectActor::StaticClass();
+	ShellCasingClass = ATutorialShellCasingActor::StaticClass();
 
 	ConfigureHandVisuals();
 }
@@ -119,6 +127,7 @@ void ATutorialPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateGunPitchLocomotion(DeltaSeconds);
+	UpdateHandTouchFireInput(DeltaSeconds);
 	UpdateCommandPreview(DeltaSeconds);
 }
 
@@ -279,6 +288,76 @@ bool ATutorialPawn::CommandSelectedTeamToPointedLocation()
 {
 	FHitResult Hit;
 	return TraceCommandTarget(Hit) && IssueCommandAtHit(Hit);
+}
+
+bool ATutorialPawn::FirePlayerWeapon()
+{
+	UWorld* World = GetWorld();
+	if (!World || !bEnablePlayerWeaponFire)
+	{
+		return false;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+	if (CurrentTime - LastPlayerWeaponFireTime < PlayerWeaponFireInterval)
+	{
+		return false;
+	}
+
+	FTransform MuzzleTransform;
+	if (!GetPlayerWeaponMuzzleTransform(MuzzleTransform))
+	{
+		return false;
+	}
+
+	FVector ShotDirection = MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	if (ShotDirection.IsNearlyZero())
+	{
+		ShotDirection = GetActorForwardVector();
+	}
+
+	const FVector TraceStart = MuzzleTransform.GetLocation();
+	const FVector TraceEnd = TraceStart + ShotDirection * PlayerWeaponRange;
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ActionSquadPlayerWeaponTrace), true, this);
+	if (PlayerWeapon)
+	{
+		QueryParams.AddIgnoredActor(PlayerWeapon);
+	}
+	if (PlayerWeaponComponent && PlayerWeaponComponent->GetChildActor())
+	{
+		QueryParams.AddIgnoredActor(PlayerWeaponComponent->GetChildActor());
+	}
+
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	const FVector ShotEnd = bHit ? Hit.ImpactPoint : TraceEnd;
+
+	SpawnPlayerWeaponMuzzleFlash(MuzzleTransform);
+	SpawnPlayerWeaponBulletTracer(TraceStart, ShotEnd);
+	SpawnPlayerWeaponShellCasing(MuzzleTransform);
+
+	if (bHit)
+	{
+		AActor* HitActor = Hit.GetActor();
+		const bool bBloodImpact = Cast<ATutorialTeamMemberActor>(HitActor) != nullptr;
+		SpawnPlayerWeaponImpactEffect(Hit, bBloodImpact);
+
+		if (HitActor && PlayerWeaponDamage > 0.0f)
+		{
+			UGameplayStatics::ApplyPointDamage(
+				HitActor,
+				PlayerWeaponDamage,
+				ShotDirection,
+				Hit,
+				GetController(),
+				this,
+				UDamageType::StaticClass());
+		}
+	}
+
+	LastPlayerWeaponFireTime = CurrentTime;
+	return true;
 }
 
 void ATutorialPawn::HandleCommandGestureRecognized(ECommandGesture Gesture)
@@ -752,6 +831,270 @@ void ATutorialPawn::ConfigurePlayerWeaponComponent()
 	}
 
 	PlayerWeapon = Cast<ATutorialWeaponActor>(PlayerWeaponComponent->GetChildActor());
+}
+
+bool ATutorialPawn::GetPlayerWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const
+{
+	const ATutorialWeaponActor* CurrentWeapon = PlayerWeapon;
+	if (!CurrentWeapon && PlayerWeaponComponent)
+	{
+		CurrentWeapon = Cast<ATutorialWeaponActor>(PlayerWeaponComponent->GetChildActor());
+	}
+
+	if (bUseWeaponActorMuzzleForFiring && CurrentWeapon)
+	{
+		OutMuzzleTransform = CurrentWeapon->GetMuzzleTransform();
+		return true;
+	}
+
+	if (PlayerWeaponMuzzleReference)
+	{
+		OutMuzzleTransform = PlayerWeaponMuzzleReference->GetComponentTransform();
+		return true;
+	}
+
+	if (CurrentWeapon)
+	{
+		OutMuzzleTransform = CurrentWeapon->GetMuzzleTransform();
+		return true;
+	}
+
+	return false;
+}
+
+FTransform ATutorialPawn::GetPlayerWeaponShellEjectionTransform(const FTransform& MuzzleTransform) const
+{
+	const ATutorialWeaponActor* CurrentWeapon = PlayerWeapon;
+	if (!CurrentWeapon && PlayerWeaponComponent)
+	{
+		CurrentWeapon = Cast<ATutorialWeaponActor>(PlayerWeaponComponent->GetChildActor());
+	}
+
+	return CurrentWeapon ? CurrentWeapon->GetShellEjectionTransform() : MuzzleTransform;
+}
+
+void ATutorialPawn::SpawnPlayerWeaponMuzzleFlash(const FTransform& MuzzleTransform)
+{
+	if (!bSpawnPlayerWeaponMuzzleFlash)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* EffectClass = MuzzleFlashEffectClass ? MuzzleFlashEffectClass.Get() : ATutorialBallisticEffectActor::StaticClass();
+	if (!World || !EffectClass)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBallisticEffectActor* Effect = World->SpawnActor<ATutorialBallisticEffectActor>(EffectClass, MuzzleTransform, SpawnParams);
+	if (Effect)
+	{
+		Effect->ConfigureMuzzleFlash(MuzzleTransform);
+	}
+}
+
+void ATutorialPawn::SpawnPlayerWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation)
+{
+	if (!bSpawnPlayerWeaponBulletTracer)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* EffectClass = BulletTracerEffectClass ? BulletTracerEffectClass.Get() : ATutorialBallisticEffectActor::StaticClass();
+	if (!World || !EffectClass)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBallisticEffectActor* Effect = World->SpawnActor<ATutorialBallisticEffectActor>(
+		EffectClass,
+		StartLocation,
+		(EndLocation - StartLocation).Rotation(),
+		SpawnParams);
+	if (Effect)
+	{
+		Effect->ConfigureBulletTracer(StartLocation, EndLocation);
+	}
+}
+
+void ATutorialPawn::SpawnPlayerWeaponImpactEffect(const FHitResult& Hit, bool bBloodImpact)
+{
+	if (!bSpawnPlayerWeaponImpactEffect)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* EffectClass = ImpactEffectClass ? ImpactEffectClass.Get() : ATutorialBallisticEffectActor::StaticClass();
+	if (!World || !EffectClass)
+	{
+		return;
+	}
+
+	const FVector ImpactNormal = Hit.ImpactNormal.IsNearlyZero() ? FVector::UpVector : Hit.ImpactNormal;
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBallisticEffectActor* Effect = World->SpawnActor<ATutorialBallisticEffectActor>(
+		EffectClass,
+		Hit.ImpactPoint + ImpactNormal * 1.5f,
+		ImpactNormal.Rotation(),
+		SpawnParams);
+	if (Effect)
+	{
+		Effect->ConfigureImpact(Hit.ImpactPoint, ImpactNormal, bBloodImpact);
+	}
+}
+
+void ATutorialPawn::SpawnPlayerWeaponShellCasing(const FTransform& MuzzleTransform)
+{
+	if (!bSpawnPlayerWeaponShellCasing)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* CasingClass = ShellCasingClass ? ShellCasingClass.Get() : ATutorialShellCasingActor::StaticClass();
+	if (!World || !CasingClass)
+	{
+		return;
+	}
+
+	const FTransform EjectionTransform = GetPlayerWeaponShellEjectionTransform(MuzzleTransform);
+	const FVector LinearVelocity = EjectionTransform.TransformVectorNoScale(ShellEjectionLocalVelocity);
+	const FVector AngularVelocity = EjectionTransform.TransformVectorNoScale(ShellEjectionAngularVelocityDegrees);
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialShellCasingActor* Casing = World->SpawnActor<ATutorialShellCasingActor>(CasingClass, EjectionTransform, SpawnParams);
+	if (Casing)
+	{
+		Casing->LaunchShell(EjectionTransform, LinearVelocity, AngularVelocity);
+	}
+}
+
+void ATutorialPawn::UpdateHandTouchFireInput(float DeltaSeconds)
+{
+	if (!bEnableHandTouchFireInput)
+	{
+		CurrentHandTouchFireDistance = 0.0f;
+		bHandTouchFireArmed = true;
+		return;
+	}
+
+	float ClosestDistance = 0.0f;
+	if (!GetClosestHandBoneDistance(ClosestDistance))
+	{
+		CurrentHandTouchFireDistance = 0.0f;
+		bHandTouchFireArmed = true;
+		return;
+	}
+
+	CurrentHandTouchFireDistance = ClosestDistance;
+
+	const float TriggerDistance = FMath::Max(0.1f, HandTouchFireDistance);
+	const float ReleaseDistance = FMath::Max(TriggerDistance + 0.1f, HandTouchFireReleaseDistance);
+	if (bHandTouchFireArmed && ClosestDistance <= TriggerDistance)
+	{
+		FirePlayerWeapon();
+		bHandTouchFireArmed = false;
+	}
+	else if (!bHandTouchFireArmed && ClosestDistance >= ReleaseDistance)
+	{
+		bHandTouchFireArmed = true;
+	}
+}
+
+bool ATutorialPawn::GetClosestHandBoneDistance(float& OutClosestDistance) const
+{
+	if (!HasValidHandsForTouchFire())
+	{
+		return false;
+	}
+
+	TArray<FVector> LeftBoneLocations;
+	TArray<FVector> RightBoneLocations;
+	if (!GetHandBoneLocations(LeftHandMesh, LeftBoneLocations) || !GetHandBoneLocations(RightHandMesh, RightBoneLocations))
+	{
+		return false;
+	}
+
+	float ClosestDistanceSquared = TNumericLimits<float>::Max();
+	for (const FVector& LeftLocation : LeftBoneLocations)
+	{
+		for (const FVector& RightLocation : RightBoneLocations)
+		{
+			ClosestDistanceSquared = FMath::Min(ClosestDistanceSquared, FVector::DistSquared(LeftLocation, RightLocation));
+		}
+	}
+
+	if (ClosestDistanceSquared == TNumericLimits<float>::Max())
+	{
+		return false;
+	}
+
+	OutClosestDistance = FMath::Sqrt(ClosestDistanceSquared);
+	return true;
+}
+
+bool ATutorialPawn::HasValidHandsForTouchFire() const
+{
+	if (!LeftHandMesh || !RightHandMesh || !LeftHandMesh->GetSkinnedAsset() || !RightHandMesh->GetSkinnedAsset())
+	{
+		return false;
+	}
+
+	if (!bRequireHighConfidenceHandsForFire)
+	{
+		return true;
+	}
+
+	if (!UOculusXRInputFunctionLibrary::IsHandTrackingEnabled())
+	{
+		return false;
+	}
+
+	const bool bLeftValid =
+		UOculusXRInputFunctionLibrary::IsHandPositionValid(EOculusXRHandType::HandLeft) &&
+		UOculusXRInputFunctionLibrary::GetTrackingConfidence(EOculusXRHandType::HandLeft) != EOculusXRTrackingConfidence::Low;
+	const bool bRightValid =
+		UOculusXRInputFunctionLibrary::IsHandPositionValid(EOculusXRHandType::HandRight) &&
+		UOculusXRInputFunctionLibrary::GetTrackingConfidence(EOculusXRHandType::HandRight) != EOculusXRTrackingConfidence::Low;
+
+	return bLeftValid && bRightValid;
+}
+
+bool ATutorialPawn::GetHandBoneLocations(const UOculusXRHandComponent* HandMesh, TArray<FVector>& OutLocations) const
+{
+	OutLocations.Reset();
+	if (!HandMesh || !HandMesh->GetSkinnedAsset())
+	{
+		return false;
+	}
+
+	const int32 BoneCount = HandMesh->GetNumBones();
+	OutLocations.Reserve(BoneCount);
+	for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
+	{
+		const FName BoneName = HandMesh->GetBoneName(BoneIndex);
+		if (BoneName == NAME_None)
+		{
+			continue;
+		}
+
+		OutLocations.Add(HandMesh->GetBoneLocation(BoneName));
+	}
+
+	return OutLocations.Num() > 0;
 }
 
 void ATutorialPawn::UpdateGunPitchLocomotion(float DeltaSeconds)

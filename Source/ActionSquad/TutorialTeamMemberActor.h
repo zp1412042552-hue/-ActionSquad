@@ -62,6 +62,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Team")
 	void InitializeTeamMember(ETeamMemberRole InRole);
@@ -98,6 +99,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Team")
 	bool bSelected = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Combat")
+	bool bCanReceivePlayerWeaponDamage = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Combat", meta = (ClampMin = "1.0"))
+	float MaxHealth = 100.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Combat")
+	float CurrentHealth = 100.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Combat")
+	bool bDead = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Team")
 	float NameplateHeight = 210.0f;
@@ -169,8 +182,10 @@ private:
 	void FinishMoveCommand();
 	void UpdateCommandMovement(float DeltaSeconds);
 	void UpdateMovementAnimation();
+	void ResumeAfterHitReaction();
 
 	float LowSpeedMoveSeconds = 0.0f;
+	FTimerHandle HitReactionTimerHandle;
 };
 
 UCLASS(Blueprintable)

@@ -25,9 +25,19 @@ ATutorialWeaponActor::ATutorialWeaponActor()
 	MuzzlePoint = CreateDefaultSubobject<USceneComponent>(TEXT("MuzzlePoint"));
 	MuzzlePoint->SetupAttachment(WeaponMesh);
 	MuzzlePoint->SetRelativeLocation(FVector(45.0f, 0.0f, 2.0f));
+
+	ShellEjectionPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ShellEjectionPoint"));
+	ShellEjectionPoint->SetupAttachment(WeaponMesh);
+	ShellEjectionPoint->SetRelativeLocation(FVector(22.0f, 7.0f, 3.0f));
+	ShellEjectionPoint->SetRelativeRotation(FRotator(0.0f, 90.0f, 0.0f));
 }
 
 FTransform ATutorialWeaponActor::GetMuzzleTransform() const
 {
 	return MuzzlePoint ? MuzzlePoint->GetComponentTransform() : GetActorTransform();
+}
+
+FTransform ATutorialWeaponActor::GetShellEjectionTransform() const
+{
+	return ShellEjectionPoint ? ShellEjectionPoint->GetComponentTransform() : GetMuzzleTransform();
 }
