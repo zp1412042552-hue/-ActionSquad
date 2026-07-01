@@ -11,6 +11,8 @@
 #include "NavigationSystem.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "TeamNameplateWidget.h"
+#include "TutorialBallisticEffectActor.h"
+#include "TutorialBulletMarkActor.h"
 #include "TutorialDoorActor.h"
 #include "TutorialWeaponActor.h"
 #include "TimerManager.h"
@@ -52,6 +54,10 @@ ATutorialTeamMemberActor::ATutorialTeamMemberActor()
 	NameplateWidget->SetRelativeScale3D(FVector(0.18f));
 
 	WeaponActorClass = ATutorialWeaponActor::StaticClass();
+	MuzzleFlashEffectClass = ATutorialBallisticEffectActor::StaticClass();
+	BulletTracerEffectClass = ATutorialBallisticEffectActor::StaticClass();
+	ImpactEffectClass = ATutorialBallisticEffectActor::StaticClass();
+	BulletMarkClass = ATutorialBulletMarkActor::StaticClass();
 
 	LoadDefaultAssets();
 }
@@ -199,6 +205,11 @@ void ATutorialTeamMemberActor::PlayTeamAnimation(ETeamMemberAnimState NewState)
 	SoldierMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 	SoldierMesh->SetAnimation(Anim);
 	SoldierMesh->Play(bLoop);
+
+	if (NewState == ETeamMemberAnimState::Fire)
+	{
+		FireWeaponForward();
+	}
 }
 
 void ATutorialTeamMemberActor::MoveToCommandLocation(const FVector& WorldLocation)
@@ -307,6 +318,42 @@ void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 	SetActorRotation((Door->GetActorLocation() - GetActorLocation()).Rotation());
 	PlayTeamAnimation(ETeamMemberAnimState::BreachKick);
 	Door->BreachFrom(GetActorLocation());
+}
+
+bool ATutorialTeamMemberActor::FireWeaponForward()
+{
+	FTransform MuzzleTransform;
+	if (!GetWeaponMuzzleTransform(MuzzleTransform))
+	{
+		return false;
+	}
+
+	const FTransform CorrectedMuzzleTransform = GetCorrectedWeaponMuzzleTransform(MuzzleTransform);
+	FVector ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	if (ShotDirection.IsNearlyZero())
+	{
+		ShotDirection = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	}
+
+	return FireWeaponInDirection(ShotDirection);
+}
+
+bool ATutorialTeamMemberActor::FireWeaponAtLocation(const FVector& TargetLocation)
+{
+	FTransform MuzzleTransform;
+	if (!GetWeaponMuzzleTransform(MuzzleTransform))
+	{
+		return false;
+	}
+
+	const FTransform CorrectedMuzzleTransform = GetCorrectedWeaponMuzzleTransform(MuzzleTransform);
+	FVector ShotDirection = (TargetLocation - CorrectedMuzzleTransform.GetLocation()).GetSafeNormal();
+	if (ShotDirection.IsNearlyZero())
+	{
+		ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	}
+
+	return FireWeaponInDirection(ShotDirection);
 }
 
 void ATutorialTeamMemberActor::SnapToGround()
@@ -440,6 +487,256 @@ void ATutorialTeamMemberActor::SpawnAndAttachWeapon()
 		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
 		AttachSocket);
 	EquippedWeapon->SetActorRelativeTransform(FTransform::Identity);
+}
+
+bool ATutorialTeamMemberActor::FireWeaponInDirection(const FVector& InShotDirection)
+{
+	UWorld* World = GetWorld();
+	if (!World || !bEnableWeaponFire || bDead)
+	{
+		return false;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+	if (CurrentTime - LastWeaponFireTime < WeaponFireInterval)
+	{
+		return false;
+	}
+
+	FTransform MuzzleTransform;
+	if (!GetWeaponMuzzleTransform(MuzzleTransform))
+	{
+		return false;
+	}
+
+	const FTransform CorrectedMuzzleTransform = GetCorrectedWeaponMuzzleTransform(MuzzleTransform);
+	FVector ShotDirection = InShotDirection.GetSafeNormal();
+	if (ShotDirection.IsNearlyZero())
+	{
+		ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	}
+	if (ShotDirection.IsNearlyZero())
+	{
+		ShotDirection = GetActorForwardVector();
+	}
+
+	const FVector TraceStart = CorrectedMuzzleTransform.GetLocation();
+	const FVector TraceEnd = TraceStart + ShotDirection * WeaponRange;
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ActionSquadTeamWeaponTrace), true, this);
+	if (EquippedWeapon)
+	{
+		QueryParams.AddIgnoredActor(EquippedWeapon);
+	}
+
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
+	const FVector ShotEnd = bHit ? Hit.ImpactPoint : TraceEnd;
+
+	SpawnWeaponMuzzleFlash(CorrectedMuzzleTransform);
+	SpawnWeaponBulletTracer(TraceStart, ShotEnd);
+
+	if (bHit)
+	{
+		AActor* HitActor = Hit.GetActor();
+		const bool bCharacterImpact = Cast<APawn>(HitActor) != nullptr;
+		SpawnWeaponImpactEffect(Hit, bCharacterImpact);
+		SpawnWeaponBulletMark(Hit, bCharacterImpact);
+
+		if (HitActor && WeaponDamage > 0.0f)
+		{
+			UGameplayStatics::ApplyPointDamage(
+				HitActor,
+				WeaponDamage,
+				ShotDirection,
+				Hit,
+				GetController(),
+				this,
+				nullptr);
+		}
+	}
+
+	LastWeaponFireTime = CurrentTime;
+	return true;
+}
+
+bool ATutorialTeamMemberActor::GetWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const
+{
+	if (!EquippedWeapon)
+	{
+		return false;
+	}
+
+	OutMuzzleTransform = EquippedWeapon->GetMuzzleTransform();
+	return true;
+}
+
+FTransform ATutorialTeamMemberActor::GetCorrectedWeaponMuzzleTransform(const FTransform& MuzzleTransform) const
+{
+	const FVector ReversedForward = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	if (ReversedForward.IsNearlyZero())
+	{
+		return MuzzleTransform;
+	}
+
+	const FVector OriginalUp = MuzzleTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+	const FVector CorrectedUp = OriginalUp.IsNearlyZero() || FMath::Abs(FVector::DotProduct(OriginalUp, ReversedForward)) > 0.98f
+		? FVector::UpVector
+		: OriginalUp;
+
+	FTransform CorrectedTransform = MuzzleTransform;
+	CorrectedTransform.SetRotation(FRotationMatrix::MakeFromXZ(ReversedForward, CorrectedUp).ToQuat());
+	CorrectedTransform.NormalizeRotation();
+	return CorrectedTransform;
+}
+
+void ATutorialTeamMemberActor::SpawnWeaponMuzzleFlash(const FTransform& MuzzleTransform)
+{
+	if (!bSpawnWeaponMuzzleFlash)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* EffectClass = MuzzleFlashEffectClass ? MuzzleFlashEffectClass.Get() : ATutorialBallisticEffectActor::StaticClass();
+	if (!World || !EffectClass)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBallisticEffectActor* Effect = World->SpawnActor<ATutorialBallisticEffectActor>(EffectClass, MuzzleTransform, SpawnParams);
+	if (Effect)
+	{
+		Effect->ConfigureMuzzleFlash(MuzzleTransform);
+	}
+}
+
+void ATutorialTeamMemberActor::SpawnWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation)
+{
+	if (!bSpawnWeaponBulletTracer)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* EffectClass = BulletTracerEffectClass ? BulletTracerEffectClass.Get() : ATutorialBallisticEffectActor::StaticClass();
+	if (!World || !EffectClass)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBallisticEffectActor* Effect = World->SpawnActor<ATutorialBallisticEffectActor>(
+		EffectClass,
+		StartLocation,
+		FRotator::ZeroRotator,
+		SpawnParams);
+	if (Effect)
+	{
+		Effect->ConfigureBulletTracer(StartLocation, EndLocation);
+	}
+}
+
+void ATutorialTeamMemberActor::SpawnWeaponImpactEffect(const FHitResult& Hit, bool bCharacterImpact)
+{
+	if (!bSpawnWeaponImpactEffect)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* EffectClass = ImpactEffectClass ? ImpactEffectClass.Get() : ATutorialBallisticEffectActor::StaticClass();
+	if (!World || !EffectClass)
+	{
+		return;
+	}
+
+	const FVector ImpactNormal = Hit.ImpactNormal.IsNearlyZero() ? FVector::UpVector : Hit.ImpactNormal.GetSafeNormal();
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBallisticEffectActor* Effect = World->SpawnActor<ATutorialBallisticEffectActor>(
+		EffectClass,
+		Hit.ImpactPoint + ImpactNormal,
+		ImpactNormal.Rotation(),
+		SpawnParams);
+	if (Effect)
+	{
+		Effect->ConfigureImpact(Hit.ImpactPoint, ImpactNormal, bCharacterImpact);
+	}
+}
+
+void ATutorialTeamMemberActor::SpawnWeaponBulletMark(const FHitResult& Hit, bool bCharacterMark)
+{
+	if (!bSpawnWeaponBulletMarks)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UClass* MarkClass = BulletMarkClass ? BulletMarkClass.Get() : ATutorialBulletMarkActor::StaticClass();
+	if (!World || !MarkClass)
+	{
+		return;
+	}
+
+	FVector ImpactNormal = Hit.ImpactNormal.GetSafeNormal();
+	if (ImpactNormal.IsNearlyZero())
+	{
+		ImpactNormal = FVector::UpVector;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATutorialBulletMarkActor* Mark = World->SpawnActor<ATutorialBulletMarkActor>(
+		MarkClass,
+		Hit.ImpactPoint + ImpactNormal * 0.5f,
+		ImpactNormal.Rotation(),
+		SpawnParams);
+	if (!Mark)
+	{
+		return;
+	}
+
+	Mark->ConfigureBulletMark(Hit.ImpactPoint, ImpactNormal, Hit.GetComponent(), bCharacterMark);
+	WeaponBulletMarks.Add(Mark);
+	PruneWeaponBulletMarks();
+}
+
+void ATutorialTeamMemberActor::PruneWeaponBulletMarks()
+{
+	WeaponBulletMarks.RemoveAll([](const TWeakObjectPtr<ATutorialBulletMarkActor>& Mark)
+	{
+		return !Mark.IsValid();
+	});
+
+	if (MaxWeaponBulletMarks <= 0)
+	{
+		for (const TWeakObjectPtr<ATutorialBulletMarkActor>& Mark : WeaponBulletMarks)
+		{
+			if (Mark.IsValid())
+			{
+				Mark->Destroy();
+			}
+		}
+		WeaponBulletMarks.Reset();
+		return;
+	}
+
+	while (WeaponBulletMarks.Num() > MaxWeaponBulletMarks)
+	{
+		if (ATutorialBulletMarkActor* OldestMark = WeaponBulletMarks[0].Get())
+		{
+			OldestMark->Destroy();
+		}
+		WeaponBulletMarks.RemoveAt(0);
+	}
 }
 
 FName ATutorialTeamMemberActor::ResolveWeaponAttachSocket() const

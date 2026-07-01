@@ -8,6 +8,8 @@
 class UAnimSequence;
 class USkeletalMeshComponent;
 class ATutorialDoorActor;
+class ATutorialBallisticEffectActor;
+class ATutorialBulletMarkActor;
 class ATutorialWeaponActor;
 class UWidgetComponent;
 class UTeamNameplateWidget;
@@ -85,6 +87,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Team")
 	void BreachDoor(ATutorialDoorActor* Door);
 
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Weapon")
+	bool FireWeaponForward();
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Weapon")
+	bool FireWeaponAtLocation(const FVector& TargetLocation);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<USkeletalMeshComponent> SoldierMesh;
 
@@ -154,6 +162,45 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon")
 	FName FallbackWeaponBoneName = TEXT("RightHand");
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|Firing")
+	bool bEnableWeaponFire = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|Firing", meta = (ClampMin = "0.01", Units = "s"))
+	float WeaponFireInterval = 0.18f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|Firing", meta = (ClampMin = "0.0", Units = "cm"))
+	float WeaponRange = 5000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|Firing", meta = (ClampMin = "0.0"))
+	float WeaponDamage = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	bool bSpawnWeaponMuzzleFlash = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	bool bSpawnWeaponBulletTracer = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	bool bSpawnWeaponImpactEffect = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	bool bSpawnWeaponBulletMarks = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	TSubclassOf<ATutorialBallisticEffectActor> MuzzleFlashEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	TSubclassOf<ATutorialBallisticEffectActor> BulletTracerEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	TSubclassOf<ATutorialBallisticEffectActor> ImpactEffectClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX")
+	TSubclassOf<ATutorialBulletMarkActor> BulletMarkClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX", meta = (ClampMin = "0"))
+	int32 MaxWeaponBulletMarks = 64;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Animations")
 	FTeamMemberAnimationSet AnimationSet;
 
@@ -178,6 +225,14 @@ private:
 	void RefreshNameplate();
 	void SpawnAndAttachWeapon();
 	FName ResolveWeaponAttachSocket() const;
+	bool FireWeaponInDirection(const FVector& ShotDirection);
+	bool GetWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const;
+	FTransform GetCorrectedWeaponMuzzleTransform(const FTransform& MuzzleTransform) const;
+	void SpawnWeaponMuzzleFlash(const FTransform& MuzzleTransform);
+	void SpawnWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation);
+	void SpawnWeaponImpactEffect(const FHitResult& Hit, bool bCharacterImpact);
+	void SpawnWeaponBulletMark(const FHitResult& Hit, bool bCharacterMark);
+	void PruneWeaponBulletMarks();
 	UAnimSequence* ResolveAnimation(ETeamMemberAnimState State) const;
 	void FinishMoveCommand();
 	void UpdateCommandMovement(float DeltaSeconds);
@@ -185,6 +240,8 @@ private:
 	void ResumeAfterHitReaction();
 
 	float LowSpeedMoveSeconds = 0.0f;
+	float LastWeaponFireTime = -1000.0f;
+	TArray<TWeakObjectPtr<ATutorialBulletMarkActor>> WeaponBulletMarks;
 	FTimerHandle HitReactionTimerHandle;
 };
 
