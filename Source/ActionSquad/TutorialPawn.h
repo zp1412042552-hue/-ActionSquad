@@ -9,6 +9,7 @@ class ATutorialInstructionActor;
 class ATutorialCommandAimVisualActor;
 class ATutorialCommandMarkerActor;
 class ATutorialBallisticEffectActor;
+class ATutorialBulletMarkActor;
 class ATutorialShellCasingActor;
 class ATutorialTeamMemberActor;
 class ATutorialWeaponActor;
@@ -146,6 +147,9 @@ public:
 	bool bSpawnPlayerWeaponShellCasing = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	bool bSpawnPlayerWeaponBulletMarks = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
 	TSubclassOf<ATutorialBallisticEffectActor> MuzzleFlashEffectClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
@@ -156,6 +160,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
 	TSubclassOf<ATutorialShellCasingActor> ShellCasingClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
+	TSubclassOf<ATutorialBulletMarkActor> BulletMarkClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX", meta = (ClampMin = "0"))
+	int32 MaxPlayerWeaponBulletMarks = 64;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
 	FVector ShellEjectionLocalVelocity = FVector(-35.0f, 115.0f, 65.0f);
@@ -293,11 +303,14 @@ private:
 	void TestMoveSelectedTeam();
 	void ConfigurePlayerWeaponComponent();
 	bool GetPlayerWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const;
+	FTransform GetCorrectedPlayerWeaponMuzzleTransform(const FTransform& MuzzleTransform) const;
 	FTransform GetPlayerWeaponShellEjectionTransform(const FTransform& MuzzleTransform) const;
 	void SpawnPlayerWeaponMuzzleFlash(const FTransform& MuzzleTransform);
 	void SpawnPlayerWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation);
 	void SpawnPlayerWeaponImpactEffect(const FHitResult& Hit, bool bBloodImpact);
 	void SpawnPlayerWeaponShellCasing(const FTransform& MuzzleTransform);
+	void SpawnPlayerWeaponBulletMark(const FHitResult& Hit, bool bCharacterMark);
+	void PrunePlayerWeaponBulletMarks();
 	void UpdateHandTouchFireInput(float DeltaSeconds);
 	bool GetClosestHandBoneDistance(float& OutClosestDistance) const;
 	bool HasValidHandsForTouchFire() const;
@@ -313,6 +326,7 @@ private:
 	float PreviewHoldSeconds = 0.0f;
 	float LastPlayerWeaponFireTime = -1000.0f;
 	float GunLocomotionStartHoldTimer = 0.0f;
+	TArray<TWeakObjectPtr<ATutorialBulletMarkActor>> PlayerWeaponBulletMarks;
 	bool bHasContinuousFollowTarget = false;
 	bool bHandTouchFireArmed = true;
 	bool bCommandIssuedSinceSelection = false;

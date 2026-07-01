@@ -82,7 +82,7 @@ public:
 	FLinearColor SurfaceImpactColor = FLinearColor(1.0f, 0.62f, 0.14f, 1.0f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon FX")
-	FLinearColor BloodImpactColor = FLinearColor(0.72f, 0.02f, 0.015f, 1.0f);
+	FLinearColor BloodImpactColor = FLinearColor(1.0f, 0.42f, 0.08f, 1.0f);
 
 private:
 	void ApplyEffectMaterial();

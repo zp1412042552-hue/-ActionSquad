@@ -45,6 +45,7 @@ create_blueprint("BP_TeamB", "/Script/ActionSquad.TutorialTeamBActor")
 create_blueprint("BP_TutorialPawn", "/Script/ActionSquad.TutorialPawn")
 create_blueprint("BP_TutorialWeapon", "/Script/ActionSquad.TutorialWeaponActor")
 create_blueprint("BP_TutorialBallisticEffect", "/Script/ActionSquad.TutorialBallisticEffectActor")
+create_blueprint("BP_TutorialBulletMark", "/Script/ActionSquad.TutorialBulletMarkActor")
 create_blueprint("BP_TutorialShellCasing", "/Script/ActionSquad.TutorialShellCasingActor")
 create_blueprint("BP_TutorialInstructionScreen", "/Script/ActionSquad.TutorialInstructionActor")
 create_blueprint("BP_TutorialGestureDisplay", "/Script/ActionSquad.TutorialGestureDisplayActor")
@@ -72,6 +73,7 @@ def configure_tutorial_pawn_defaults():
         pawn_class = load_generated_class(f"{ASSET_DIR}/BP_TutorialPawn")
         weapon_class = load_generated_class(f"{ASSET_DIR}/BP_TutorialWeapon")
         ballistic_effect_class = load_generated_class(f"{ASSET_DIR}/BP_TutorialBallisticEffect")
+        bullet_mark_class = load_generated_class(f"{ASSET_DIR}/BP_TutorialBulletMark")
         shell_casing_class = load_generated_class(f"{ASSET_DIR}/BP_TutorialShellCasing")
         pawn_cdo = unreal.get_default_object(pawn_class)
         pawn_cdo.set_editor_property("player_weapon_class", weapon_class)
@@ -79,6 +81,9 @@ def configure_tutorial_pawn_defaults():
         pawn_cdo.set_editor_property("bullet_tracer_effect_class", ballistic_effect_class)
         pawn_cdo.set_editor_property("impact_effect_class", ballistic_effect_class)
         pawn_cdo.set_editor_property("shell_casing_class", shell_casing_class)
+        pawn_cdo.set_editor_property("bullet_mark_class", bullet_mark_class)
+        pawn_cdo.set_editor_property("spawn_player_weapon_bullet_marks", True)
+        pawn_cdo.set_editor_property("max_player_weapon_bullet_marks", 64)
         pawn_cdo.set_editor_property("enable_hand_touch_fire_input", True)
         pawn_cdo.set_editor_property("hand_touch_fire_distance", 2.5)
         pawn_cdo.set_editor_property("hand_touch_fire_release_distance", 5.0)
@@ -91,6 +96,20 @@ def configure_tutorial_pawn_defaults():
         unreal.log("Configured BP_TutorialPawn player_weapon_class -> BP_TutorialWeapon")
     except Exception as exc:
         unreal.log_warning(f"Could not configure BP_TutorialPawn weapon class: {exc}")
+
+
+def configure_bullet_mark_defaults():
+    try:
+        bullet_mark_class = load_generated_class(f"{ASSET_DIR}/BP_TutorialBulletMark")
+        bullet_mark_cdo = unreal.get_default_object(bullet_mark_class)
+        bullet_mark_cdo.set_editor_property("surface_radius", 15.0)
+        bullet_mark_cdo.set_editor_property("character_radius", 15.0)
+        bullet_mark_cdo.set_editor_property("surface_offset", 1.0)
+        bullet_mark_cdo.set_editor_property("character_offset", 1.0)
+        unreal.EditorAssetLibrary.save_asset(f"{ASSET_DIR}/BP_TutorialBulletMark")
+        unreal.log("Configured BP_TutorialBulletMark radius -> 15cm")
+    except Exception as exc:
+        unreal.log_warning(f"Could not configure BP_TutorialBulletMark defaults: {exc}")
 
 
 def spawn_named(label: str, class_path: str, location, rotation=(0.0, 0.0, 0.0)):
@@ -175,9 +194,11 @@ def place_tutorial_runtime_actors():
 
 
 if "-PlaceTutorialActors" in unreal.SystemLibrary.get_command_line():
+    configure_bullet_mark_defaults()
     configure_tutorial_pawn_defaults()
     place_tutorial_runtime_actors()
     unreal.log("Tutorial blueprint assets and level placements are ready.")
 else:
+    configure_bullet_mark_defaults()
     configure_tutorial_pawn_defaults()
     unreal.log("Tutorial blueprint assets are ready. Level placement was skipped.")
