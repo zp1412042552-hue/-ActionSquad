@@ -1,6 +1,7 @@
 #include "TutorialPawn.h"
 
 #include "Camera/CameraComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "CommandGestureComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -16,6 +17,7 @@
 #include "TutorialInstructionActor.h"
 #include "TutorialDoorActor.h"
 #include "TutorialTeamMemberActor.h"
+#include "TutorialWeaponActor.h"
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 #include "UObject/ConstructorHelpers.h"
@@ -56,6 +58,19 @@ ATutorialPawn::ATutorialPawn()
 	LeftHandMesh->bUpdateHandScale = true;
 	LeftHandMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	LeftHandGunAttachRoot = CreateDefaultSubobject<USceneComponent>(TEXT("LeftHandGunAttachRoot"));
+	LeftHandGunAttachRoot->SetupAttachment(LeftHandTrackingRoot);
+	LeftHandGunAttachRoot->SetRelativeTransform(FTransform(FRotator::ZeroRotator, FVector(8.0f, 0.0f, -2.0f), FVector(1.0f)));
+
+	PlayerWeaponComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("PlayerWeaponComponent"));
+	PlayerWeaponComponent->SetupAttachment(LeftHandGunAttachRoot);
+	PlayerWeaponComponent->SetChildActorClass(ATutorialWeaponActor::StaticClass());
+	PlayerWeaponComponent->SetRelativeTransform(FTransform::Identity);
+
+	PlayerWeaponMuzzleReference = CreateDefaultSubobject<USceneComponent>(TEXT("PlayerWeaponMuzzleReference"));
+	PlayerWeaponMuzzleReference->SetupAttachment(PlayerWeaponComponent);
+	PlayerWeaponMuzzleReference->SetRelativeLocation(FVector(45.0f, 0.0f, 2.0f));
+
 	RightHandMesh = CreateDefaultSubobject<UOculusXRHandComponent>(TEXT("RightHandMesh"));
 	RightHandMesh->SetupAttachment(RightHandTrackingRoot);
 	RightHandMesh->SkeletonType = EOculusXRHandType::HandRight;
@@ -70,8 +85,15 @@ ATutorialPawn::ATutorialPawn()
 	TutorialInstructionClass = ATutorialInstructionActor::StaticClass();
 	CommandMarkerClass = ATutorialCommandMarkerActor::StaticClass();
 	CommandAimVisualClass = ATutorialCommandAimVisualActor::StaticClass();
+	PlayerWeaponClass = ATutorialWeaponActor::StaticClass();
 
 	ConfigureHandVisuals();
+}
+
+void ATutorialPawn::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ConfigurePlayerWeaponComponent();
 }
 
 void ATutorialPawn::BeginPlay()
@@ -85,6 +107,7 @@ void ATutorialPawn::BeginPlay()
 	}
 
 	SpawnTutorialActors();
+	ConfigurePlayerWeaponComponent();
 
 	if (APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 	{
@@ -95,6 +118,7 @@ void ATutorialPawn::BeginPlay()
 void ATutorialPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateGunPitchLocomotion(DeltaSeconds);
 	UpdateCommandPreview(DeltaSeconds);
 }
 
@@ -711,6 +735,163 @@ void ATutorialPawn::TestMoveSelectedTeam()
 	{
 		TutorialInstruction->NotifyGesture(ECommandGesture::Action);
 	}
+}
+
+void ATutorialPawn::ConfigurePlayerWeaponComponent()
+{
+	if (!PlayerWeaponComponent)
+	{
+		PlayerWeapon = nullptr;
+		return;
+	}
+
+	UClass* ClassToUse = PlayerWeaponClass ? PlayerWeaponClass.Get() : ATutorialWeaponActor::StaticClass();
+	if (ClassToUse && PlayerWeaponComponent->GetChildActorClass() != ClassToUse)
+	{
+		PlayerWeaponComponent->SetChildActorClass(ClassToUse);
+	}
+
+	PlayerWeapon = Cast<ATutorialWeaponActor>(PlayerWeaponComponent->GetChildActor());
+}
+
+void ATutorialPawn::UpdateGunPitchLocomotion(float DeltaSeconds)
+{
+	if (!bEnableGunPitchLocomotion)
+	{
+		GunLocomotionState = EGunPitchLocomotionState::Stopped;
+		GunLocomotionStartHoldTimer = 0.0f;
+		CurrentGunLocomotionSpeed = 0.0f;
+		return;
+	}
+
+	float GunPitchDegrees = 0.0f;
+	if (!GetGunLocomotionPitch(GunPitchDegrees) || !HasValidLeftHandTrackingForGunLocomotion())
+	{
+		GunLocomotionState = EGunPitchLocomotionState::Stopped;
+		GunLocomotionStartHoldTimer = 0.0f;
+		CurrentGunLocomotionSpeed = 0.0f;
+		return;
+	}
+
+	RawGunPitchDegrees = GunPitchDegrees;
+	SmoothedGunPitchDegrees = FMath::FInterpTo(
+		SmoothedGunPitchDegrees,
+		RawGunPitchDegrees,
+		FMath::Max(0.0f, DeltaSeconds),
+		GunPitchSmoothingSpeed);
+
+	if (GunLocomotionState == EGunPitchLocomotionState::MovingForward)
+	{
+		if (SmoothedGunPitchDegrees <= GunForwardStopPitch)
+		{
+			GunLocomotionState = EGunPitchLocomotionState::Stopped;
+			GunLocomotionStartHoldTimer = 0.0f;
+		}
+	}
+	else if (GunLocomotionState == EGunPitchLocomotionState::MovingBackward)
+	{
+		if (SmoothedGunPitchDegrees >= GunBackwardStopPitch)
+		{
+			GunLocomotionState = EGunPitchLocomotionState::Stopped;
+			GunLocomotionStartHoldTimer = 0.0f;
+		}
+	}
+	else
+	{
+		EGunPitchLocomotionState PendingState = EGunPitchLocomotionState::Stopped;
+		if (SmoothedGunPitchDegrees >= GunForwardStartPitch)
+		{
+			PendingState = EGunPitchLocomotionState::MovingForward;
+		}
+		else if (SmoothedGunPitchDegrees <= GunBackwardStartPitch)
+		{
+			PendingState = EGunPitchLocomotionState::MovingBackward;
+		}
+
+		if (PendingState == EGunPitchLocomotionState::Stopped)
+		{
+			GunLocomotionStartHoldTimer = 0.0f;
+		}
+		else
+		{
+			GunLocomotionStartHoldTimer += FMath::Max(0.0f, DeltaSeconds);
+			if (GunLocomotionStartHoldTimer >= GunLocomotionStartHoldSeconds)
+			{
+				GunLocomotionState = PendingState;
+				GunLocomotionStartHoldTimer = 0.0f;
+			}
+		}
+	}
+
+	const float TargetSpeed =
+		GunLocomotionState == EGunPitchLocomotionState::MovingForward
+			? GunForwardSpeed
+			: (GunLocomotionState == EGunPitchLocomotionState::MovingBackward ? -GunBackwardSpeed : 0.0f);
+	const float InterpSpeed = FMath::Abs(TargetSpeed) > FMath::Abs(CurrentGunLocomotionSpeed)
+		? GunLocomotionAccelerationSpeed
+		: GunLocomotionDecelerationSpeed;
+	CurrentGunLocomotionSpeed = FMath::FInterpTo(
+		CurrentGunLocomotionSpeed,
+		TargetSpeed,
+		FMath::Max(0.0f, DeltaSeconds),
+		InterpSpeed);
+
+	if (FMath::Abs(CurrentGunLocomotionSpeed) <= 1.0f)
+	{
+		CurrentGunLocomotionSpeed = 0.0f;
+		return;
+	}
+
+	const FVector MoveDelta = GetPlayerLocomotionDirection() * CurrentGunLocomotionSpeed * DeltaSeconds;
+	FHitResult MoveHit;
+	AddActorWorldOffset(MoveDelta, true, &MoveHit);
+}
+
+bool ATutorialPawn::GetGunLocomotionPitch(float& OutPitchDegrees) const
+{
+	if (!PlayerWeaponMuzzleReference)
+	{
+		return false;
+	}
+
+	const FVector MuzzleForward = PlayerWeaponMuzzleReference->GetForwardVector().GetSafeNormal();
+	if (MuzzleForward.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// Positive means the muzzle is pushed below horizontal; negative means it is raised above horizontal.
+	OutPitchDegrees = -FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(MuzzleForward.Z, -1.0f, 1.0f)));
+	return true;
+}
+
+bool ATutorialPawn::HasValidLeftHandTrackingForGunLocomotion() const
+{
+	if (!bRequireLeftHandTrackingForGunLocomotion)
+	{
+		return true;
+	}
+
+	if (!UOculusXRInputFunctionLibrary::IsHandTrackingEnabled())
+	{
+		return false;
+	}
+
+	return UOculusXRInputFunctionLibrary::GetTrackingConfidence(EOculusXRHandType::HandLeft) != EOculusXRTrackingConfidence::Low;
+}
+
+FVector ATutorialPawn::GetPlayerLocomotionDirection() const
+{
+	FVector Forward = Camera ? Camera->GetForwardVector() : GetActorForwardVector();
+	Forward.Z = 0.0f;
+	if (!Forward.Normalize())
+	{
+		Forward = GetActorForwardVector();
+		Forward.Z = 0.0f;
+		Forward.Normalize();
+	}
+
+	return Forward.IsNearlyZero() ? FVector::ForwardVector : Forward;
 }
 
 void ATutorialPawn::ConfigureHandVisuals()

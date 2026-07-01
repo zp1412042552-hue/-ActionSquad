@@ -9,11 +9,21 @@ class ATutorialInstructionActor;
 class ATutorialCommandAimVisualActor;
 class ATutorialCommandMarkerActor;
 class ATutorialTeamMemberActor;
+class ATutorialWeaponActor;
 class UCameraComponent;
+class UChildActorComponent;
 class UCommandGestureComponent;
 class UMotionControllerComponent;
 class UOculusXRHandComponent;
 class UCapsuleComponent;
+
+UENUM(BlueprintType)
+enum class EGunPitchLocomotionState : uint8
+{
+	Stopped,
+	MovingForward,
+	MovingBackward
+};
 
 UCLASS(Blueprintable)
 class ACTIONSQUAD_API ATutorialPawn : public APawn
@@ -23,6 +33,7 @@ class ACTIONSQUAD_API ATutorialPawn : public APawn
 public:
 	ATutorialPawn();
 
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -58,6 +69,15 @@ public:
 	TObjectPtr<UOculusXRHandComponent> LeftHandMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<USceneComponent> LeftHandGunAttachRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<UChildActorComponent> PlayerWeaponComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<USceneComponent> PlayerWeaponMuzzleReference;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<UOculusXRHandComponent> RightHandMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
@@ -74,6 +94,45 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial")
 	FVector TeamBOffset = FVector(240.0f, 120.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon")
+	TSubclassOf<ATutorialWeaponActor> PlayerWeaponClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement")
+	bool bEnableGunPitchLocomotion = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0"))
+	float GunForwardSpeed = 180.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0"))
+	float GunBackwardSpeed = 80.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0", Units = "deg"))
+	float GunForwardStartPitch = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0", Units = "deg"))
+	float GunForwardStopPitch = 30.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMax = "0.0", Units = "deg"))
+	float GunBackwardStartPitch = -55.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMax = "0.0", Units = "deg"))
+	float GunBackwardStopPitch = -30.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0"))
+	float GunPitchSmoothingSpeed = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0", Units = "s"))
+	float GunLocomotionStartHoldSeconds = 0.12f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0"))
+	float GunLocomotionAccelerationSpeed = 4.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement", meta = (ClampMin = "0.0"))
+	float GunLocomotionDecelerationSpeed = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement")
+	bool bRequireLeftHandTrackingForGunLocomotion = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Command")
 	float CommandTraceDistance = 1200.0f;
@@ -130,7 +189,22 @@ public:
 	TObjectPtr<ATutorialCommandAimVisualActor> CommandAimVisual;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialWeaponActor> PlayerWeapon;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Tutorial")
 	ESelectedTeamTarget CurrentSelectedTeam = ESelectedTeamTarget::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Player Movement")
+	EGunPitchLocomotionState GunLocomotionState = EGunPitchLocomotionState::Stopped;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Player Movement")
+	float RawGunPitchDegrees = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Player Movement")
+	float SmoothedGunPitchDegrees = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Player Movement")
+	float CurrentGunLocomotionSpeed = 0.0f;
 
 private:
 	UFUNCTION()
@@ -152,11 +226,17 @@ private:
 	void TestSelectA();
 	void TestSelectB();
 	void TestMoveSelectedTeam();
+	void ConfigurePlayerWeaponComponent();
+	void UpdateGunPitchLocomotion(float DeltaSeconds);
+	bool GetGunLocomotionPitch(float& OutPitchDegrees) const;
+	bool HasValidLeftHandTrackingForGunLocomotion() const;
+	FVector GetPlayerLocomotionDirection() const;
 	void ConfigureHandVisuals();
 
 	FVector LastPreviewLocation = FVector::ZeroVector;
 	TWeakObjectPtr<AActor> LastPreviewActor;
 	float PreviewHoldSeconds = 0.0f;
+	float GunLocomotionStartHoldTimer = 0.0f;
 	bool bHasContinuousFollowTarget = false;
 	bool bCommandIssuedSinceSelection = false;
 	bool bCanRearmSameTeamCommand = true;
