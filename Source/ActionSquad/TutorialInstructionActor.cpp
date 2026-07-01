@@ -5,8 +5,13 @@
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "TutorialCompletionZoneActor.h"
 #include "TutorialCommandWidget.h"
+#include "TutorialDoorActor.h"
+#include "TutorialFloorMarkerActor.h"
 #include "TutorialGestureDisplayActor.h"
+#include "TutorialPawn.h"
+#include "TutorialTeamMemberActor.h"
 
 ATutorialInstructionActor::ATutorialInstructionActor()
 {
@@ -44,6 +49,8 @@ void ATutorialInstructionActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	UpdateObjectiveProgress();
+
 	if (EnsureCamera())
 	{
 		UpdateTransform(DeltaSeconds);
@@ -61,6 +68,7 @@ void ATutorialInstructionActor::StartTutorial()
 	BuildDefaultSteps();
 	InitializeWidget();
 	ResolveGestureDisplayActor();
+	ResolveTutorialTargets();
 	SetCurrentStep(0);
 }
 
@@ -74,6 +82,15 @@ void ATutorialInstructionActor::NotifyGesture(ECommandGesture Gesture)
 	const FCommandTutorialStep& Step = Steps[CurrentStepIndex];
 	if (Step.RequiredGesture == Gesture)
 	{
+		if (CurrentStepIndex == 1 || CurrentStepIndex == 2 || CurrentStepIndex == 3)
+		{
+			if (CachedWidget)
+			{
+				CachedWidget->SetFooterText(FText::FromString(TEXT("很好，继续指向目标，让队友完成动作。")));
+			}
+			return;
+		}
+
 		SetCurrentStep(FMath::Min(CurrentStepIndex + 1, Steps.Num() - 1));
 		return;
 	}
@@ -84,9 +101,54 @@ void ATutorialInstructionActor::NotifyGesture(ECommandGesture Gesture)
 	}
 }
 
+void ATutorialInstructionActor::NotifyPlayerFiredWeapon()
+{
+	if (IsStep(0))
+	{
+		SetCurrentStep(1);
+	}
+}
+
+void ATutorialInstructionActor::NotifyDoorBreached(ATutorialDoorActor* Door)
+{
+	if (!IsStep(3))
+	{
+		return;
+	}
+
+	if (!BreachDoor || BreachDoor == Door)
+	{
+		SetCurrentStep(4);
+	}
+}
+
+void ATutorialInstructionActor::NotifyPlayerEnteredCompletionZone(ATutorialCompletionZoneActor* Zone)
+{
+	if (!IsStep(5))
+	{
+		return;
+	}
+
+	if (Zone && Zone->bOnlyCompleteAfterDoorBreached && BreachDoor && BreachDoor->DoorState != ETutorialDoorState::Breached)
+	{
+		return;
+	}
+
+	if (!CompletionZone || CompletionZone == Zone)
+	{
+		CompleteTutorial();
+	}
+}
+
 void ATutorialInstructionActor::SetCurrentStep(int32 StepIndex)
 {
 	CurrentStepIndex = Steps.IsValidIndex(StepIndex) ? StepIndex : INDEX_NONE;
+	bHasStepStartPlayerLocation = false;
+	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		StepStartPlayerLocation = PlayerPawn->GetActorLocation();
+		bHasStepStartPlayerLocation = true;
+	}
 	ApplyCurrentStepToWidget();
 }
 
@@ -94,50 +156,59 @@ void ATutorialInstructionActor::BuildDefaultSteps()
 {
 	Steps.Reset();
 
-	FCommandTutorialStep SelectA;
-	SelectA.Title = FText::FromString(TEXT("1/5 选择队友 A"));
-	SelectA.Highlight = FText::FromString(TEXT("伸出 1 根手指"));
-	SelectA.Body = FText::FromString(TEXT("在识别区内保持 0.5 秒，队友 A 头顶牌会点亮。"));
-	SelectA.FooterHint = FText::FromString(TEXT("测试键：1"));
-	SelectA.RequiredGesture = ECommandGesture::SelectA;
-	SelectA.GestureDisplayIndex = 0;
-	Steps.Add(SelectA);
-
-	FCommandTutorialStep SelectB;
-	SelectB.Title = FText::FromString(TEXT("2/5 选择队友 B"));
-	SelectB.Highlight = FText::FromString(TEXT("伸出 2 根手指"));
-	SelectB.Body = FText::FromString(TEXT("在识别区内保持 0.5 秒，队友 B 头顶牌会点亮。"));
-	SelectB.FooterHint = FText::FromString(TEXT("测试键：2"));
-	SelectB.RequiredGesture = ECommandGesture::SelectB;
-	SelectB.GestureDisplayIndex = 1;
-	Steps.Add(SelectB);
+	FCommandTutorialStep Fire;
+	Fire.Title = FText::FromString(TEXT("1/6 开火"));
+	Fire.Highlight = FText::FromString(TEXT("抬起双手，轻碰开火"));
+	Fire.Body = FText::FromString(TEXT("左手持枪，右手靠近左手。两只手轻轻贴近时，武器会发射一枪。"));
+	Fire.FooterHint = FText::FromString(TEXT("开出第一枪后，继续学习队友指挥。"));
+	Fire.RequiredGesture = ECommandGesture::None;
+	Fire.GestureDisplayIndex = INDEX_NONE;
+	Steps.Add(Fire);
 
 	FCommandTutorialStep MoveA;
-	MoveA.Title = FText::FromString(TEXT("3/5 移动队友 A"));
-	MoveA.Highlight = FText::FromString(TEXT("再选择 A，指向地面标记"));
-	MoveA.Body = FText::FromString(TEXT("选择 A 后，指向地面上的 A 标记。圆圈投影稳定 0.5 秒后，队友 A 会移动过去。"));
-	MoveA.FooterHint = FText::FromString(TEXT("测试键：1 选择 A，E 直接确认当前指向。"));
-	MoveA.RequiredGesture = ECommandGesture::Action;
+	MoveA.Title = FText::FromString(TEXT("2/6 队友 A 到位"));
+	MoveA.Highlight = FText::FromString(TEXT("伸出 1 根手指，指向 A 标识"));
+	MoveA.Body = FText::FromString(TEXT("选择队友 A，然后把指向线落在门口地面的 A 标识上。队友 A 到达站位后，会自动进入下一步。"));
+	MoveA.FooterHint = FText::FromString(TEXT("让指向线保持在 A 标识附近，直到队友开始移动。"));
+	MoveA.RequiredGesture = ECommandGesture::SelectA;
 	MoveA.GestureDisplayIndex = 0;
 	Steps.Add(MoveA);
 
 	FCommandTutorialStep MoveB;
-	MoveB.Title = FText::FromString(TEXT("4/5 移动队友 B"));
-	MoveB.Highlight = FText::FromString(TEXT("再选择 B，指向地面标记"));
-	MoveB.Body = FText::FromString(TEXT("选择 B 后，指向地面上的 B 标记。圆圈投影稳定 0.5 秒后，队友 B 会移动过去。"));
-	MoveB.FooterHint = FText::FromString(TEXT("测试键：2 选择 B，E 直接确认当前指向。"));
-	MoveB.RequiredGesture = ECommandGesture::Action;
+	MoveB.Title = FText::FromString(TEXT("3/6 队友 B 到位"));
+	MoveB.Highlight = FText::FromString(TEXT("伸出 2 根手指，指向 B 标识"));
+	MoveB.Body = FText::FromString(TEXT("选择队友 B，然后把指向线落在门口地面的 B 标识上。队友 B 到达站位后，会自动进入下一步。"));
+	MoveB.FooterHint = FText::FromString(TEXT("让指向线保持在 B 标识附近，直到队友开始移动。"));
+	MoveB.RequiredGesture = ECommandGesture::SelectB;
 	MoveB.GestureDisplayIndex = 1;
 	Steps.Add(MoveB);
 
 	FCommandTutorialStep BreachA;
-	BreachA.Title = FText::FromString(TEXT("5/5 队友 A 踹门"));
-	BreachA.Highlight = FText::FromString(TEXT("选择 A，指向门"));
-	BreachA.Body = FText::FromString(TEXT("选择 A 后，指向门并保持 0.5 秒。队友 A 会走向门并执行破门动作。"));
-	BreachA.FooterHint = FText::FromString(TEXT("命中门时圆圈投影会确认破门目标。"));
-	BreachA.RequiredGesture = ECommandGesture::Action;
+	BreachA.Title = FText::FromString(TEXT("4/6 破门"));
+	BreachA.Highlight = FText::FromString(TEXT("选择队友 A，指向门"));
+	BreachA.Body = FText::FromString(TEXT("再次选择队友 A，把指向线落在门上。队友 A 会靠近门口，并执行破门动作。"));
+	BreachA.FooterHint = FText::FromString(TEXT("门被踹开后，先学习移动，再穿过门。"));
+	BreachA.RequiredGesture = ECommandGesture::SelectA;
 	BreachA.GestureDisplayIndex = 2;
 	Steps.Add(BreachA);
+
+	FCommandTutorialStep MovePlayer;
+	MovePlayer.Title = FText::FromString(TEXT("5/6 前进与后退"));
+	MovePlayer.Highlight = FText::FromString(TEXT("枪口下压前进，枪口上抬后退"));
+	MovePlayer.Body = FText::FromString(TEXT("左手握住枪。把枪口向下压，会向当前视线方向前进；把枪口向上抬，会向后退。需要转身时，请在现实中原地转身。"));
+	MovePlayer.FooterHint = FText::FromString(TEXT("现在向前移动一小段距离，教程会自动进入最后一步。"));
+	MovePlayer.RequiredGesture = ECommandGesture::None;
+	MovePlayer.GestureDisplayIndex = INDEX_NONE;
+	Steps.Add(MovePlayer);
+
+	FCommandTutorialStep EnterRoom;
+	EnterRoom.Title = FText::FromString(TEXT("6/6 进入房间"));
+	EnterRoom.Highlight = FText::FromString(TEXT("穿过门"));
+	EnterRoom.Body = FText::FromString(TEXT("门已经打开。现在从门口通过，进入另一间房，完成本段教程。"));
+	EnterRoom.FooterHint = FText::FromString(TEXT("进入门后的完成区域后，教程会自动结束。"));
+	EnterRoom.RequiredGesture = ECommandGesture::None;
+	EnterRoom.GestureDisplayIndex = INDEX_NONE;
+	Steps.Add(EnterRoom);
 }
 
 void ATutorialInstructionActor::RemoveDuplicateInstructionActors()
@@ -239,6 +310,113 @@ void ATutorialInstructionActor::ResolveGestureDisplayActor()
 		SpawnParams);
 }
 
+void ATutorialInstructionActor::ResolveTutorialTargets()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	for (TActorIterator<ATutorialFloorMarkerActor> It(World); It; ++It)
+	{
+		ATutorialFloorMarkerActor* Marker = *It;
+		if (!Marker)
+		{
+			continue;
+		}
+
+		if (Marker->MarkerTarget == ESelectedTeamTarget::TeamA && !TeamAMarker)
+		{
+			TeamAMarker = Marker;
+		}
+		else if (Marker->MarkerTarget == ESelectedTeamTarget::TeamB && !TeamBMarker)
+		{
+			TeamBMarker = Marker;
+		}
+	}
+
+	if (!BreachDoor)
+	{
+		for (TActorIterator<ATutorialDoorActor> It(World); It; ++It)
+		{
+			BreachDoor = *It;
+			break;
+		}
+	}
+
+	if (!CompletionZone)
+	{
+		for (TActorIterator<ATutorialCompletionZoneActor> It(World); It; ++It)
+		{
+			CompletionZone = *It;
+			break;
+		}
+	}
+}
+
+void ATutorialInstructionActor::UpdateObjectiveProgress()
+{
+	if (!Steps.IsValidIndex(CurrentStepIndex))
+	{
+		return;
+	}
+
+	ResolveTutorialTargets();
+
+	ATutorialPawn* TutorialPawn = Cast<ATutorialPawn>(UGameplayStatics::GetPlayerPawn(this, 0));
+	if (!TutorialPawn)
+	{
+		return;
+	}
+
+	if (IsStep(1) && TeamAMarker && TeamAMarker->IsTeamMemberAtMarker(TutorialPawn->TeamA))
+	{
+		SetCurrentStep(2);
+		return;
+	}
+
+	if (IsStep(2) && TeamBMarker && TeamBMarker->IsTeamMemberAtMarker(TutorialPawn->TeamB))
+	{
+		SetCurrentStep(3);
+		return;
+	}
+
+	if (IsStep(3) && BreachDoor && BreachDoor->DoorState == ETutorialDoorState::Breached)
+	{
+		SetCurrentStep(4);
+		return;
+	}
+
+	if (IsStep(4) && bHasStepStartPlayerLocation)
+	{
+		const float RequiredDistance = FMath::Max(1.0f, LocomotionTutorialForwardDistance);
+		if (FVector::DistSquared2D(TutorialPawn->GetActorLocation(), StepStartPlayerLocation) >= FMath::Square(RequiredDistance))
+		{
+			SetCurrentStep(5);
+		}
+	}
+}
+
+void ATutorialInstructionActor::CompleteTutorial()
+{
+	if (CachedWidget)
+	{
+		CachedWidget->SetTitleText(FText::FromString(TEXT("教程完成")));
+		CachedWidget->SetHighlightText(FText::FromString(TEXT("队友指挥已完成")));
+		CachedWidget->SetBodyText(FText::FromString(TEXT("你已经完成开火、站位、指挥、破门和移动流程。")));
+		CachedWidget->SetFooterText(FText::FromString(TEXT("可以继续进入下一段教程。")));
+		CachedWidget->SetStepIndicator(Steps.Num(), Steps.Num());
+	}
+
+	if (GestureDisplayActor)
+	{
+		GestureDisplayActor->SetActorHiddenInGame(true);
+	}
+
+	CurrentStepIndex = INDEX_NONE;
+}
+
 void ATutorialInstructionActor::UpdateTransform(float DeltaSeconds)
 {
 	if (!PlayerCameraManager)
@@ -298,4 +476,9 @@ bool ATutorialInstructionActor::EnsureCamera()
 	}
 
 	return PlayerCameraManager != nullptr;
+}
+
+bool ATutorialInstructionActor::IsStep(int32 StepIndex) const
+{
+	return CurrentStepIndex == StepIndex && Steps.IsValidIndex(CurrentStepIndex);
 }

@@ -14,9 +14,19 @@ PLACED_LABELS = {
 }
 
 
-def create_blueprint(asset_name: str, parent_class_path: str):
+def create_blueprint(asset_name: str, parent_class_path: str, force_recreate: bool = False):
     unreal.EditorAssetLibrary.make_directory(ASSET_DIR)
     asset_path = f"{ASSET_DIR}/{asset_name}"
+
+    if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
+        if force_recreate:
+            if not unreal.EditorAssetLibrary.delete_asset(asset_path):
+                raise RuntimeError(f"Failed to delete existing asset before recreate: {asset_path}")
+            unreal.log(f"Deleted {asset_path} before recreation")
+        else:
+            asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+            unreal.log(f"{asset_path} already exists")
+            return asset
 
     if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
         asset = unreal.EditorAssetLibrary.load_asset(asset_path)
@@ -40,6 +50,14 @@ def create_blueprint(asset_name: str, parent_class_path: str):
     return asset
 
 
+def delete_asset_if_exists(asset_name: str):
+    asset_path = f"{ASSET_DIR}/{asset_name}"
+    if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
+        if not unreal.EditorAssetLibrary.delete_asset(asset_path):
+            raise RuntimeError(f"Failed to delete obsolete asset: {asset_path}")
+        unreal.log(f"Deleted obsolete {asset_path}")
+
+
 create_blueprint("BP_TeamA", "/Script/ActionSquad.TutorialTeamAActor")
 create_blueprint("BP_TeamB", "/Script/ActionSquad.TutorialTeamBActor")
 create_blueprint("BP_TutorialPawn", "/Script/ActionSquad.TutorialPawn")
@@ -50,6 +68,10 @@ create_blueprint("BP_TutorialShellCasing", "/Script/ActionSquad.TutorialShellCas
 create_blueprint("BP_TutorialInstructionScreen", "/Script/ActionSquad.TutorialInstructionActor")
 create_blueprint("BP_TutorialGestureDisplay", "/Script/ActionSquad.TutorialGestureDisplayActor")
 create_blueprint("BP_TutorialDoor", "/Script/ActionSquad.TutorialDoorActor")
+delete_asset_if_exists("BP_TutorialFloorMarker")
+create_blueprint("BP_TutorialFloorMarker_A", "/Script/ActionSquad.TutorialFloorMarkerAActor", force_recreate=True)
+create_blueprint("BP_TutorialFloorMarker_B", "/Script/ActionSquad.TutorialFloorMarkerBActor", force_recreate=True)
+create_blueprint("BP_TutorialCompletionZone", "/Script/ActionSquad.TutorialCompletionZoneActor")
 
 unreal.EditorAssetLibrary.save_directory(ASSET_DIR)
 

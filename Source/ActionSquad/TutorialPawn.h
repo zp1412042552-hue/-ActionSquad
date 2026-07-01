@@ -303,7 +303,6 @@ private:
 	void TestMoveSelectedTeam();
 	void ConfigurePlayerWeaponComponent();
 	bool GetPlayerWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const;
-	FTransform GetCorrectedPlayerWeaponMuzzleTransform(const FTransform& MuzzleTransform) const;
 	FTransform GetPlayerWeaponShellEjectionTransform(const FTransform& MuzzleTransform) const;
 	void SpawnPlayerWeaponMuzzleFlash(const FTransform& MuzzleTransform);
 	void SpawnPlayerWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation);

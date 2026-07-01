@@ -1,7 +1,10 @@
 #include "TutorialDoorActor.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "EngineUtils.h"
+#include "TutorialInstructionActor.h"
 #include "UObject/ConstructorHelpers.h"
 
 ATutorialDoorActor::ATutorialDoorActor()
@@ -33,6 +36,29 @@ ATutorialDoorActor::ATutorialDoorActor()
 	DoorLabel->SetHorizontalAlignment(EHorizTextAligment::EHTA_Center);
 	DoorLabel->SetWorldSize(28.0f);
 	DoorLabel->SetTextRenderColor(FColor(220, 235, 245));
+
+	FrontBreachStandPoint = CreateDefaultSubobject<USceneComponent>(TEXT("FrontBreachStandPoint"));
+	FrontBreachStandPoint->SetupAttachment(SceneRoot);
+	FrontBreachStandPoint->SetRelativeLocation(FVector(-BreachStandDistance, 0.0f, 0.0f));
+
+	BackBreachStandPoint = CreateDefaultSubobject<USceneComponent>(TEXT("BackBreachStandPoint"));
+	BackBreachStandPoint->SetupAttachment(SceneRoot);
+	
+	BreachTriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BreachTriggerBox"));
+	BreachTriggerBox->SetupAttachment(SceneRoot);
+	BreachTriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	BreachTriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	BreachTriggerBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	BreachTriggerBox->SetGenerateOverlapEvents(true);
+	BreachTriggerBox->SetHiddenInGame(true);
+
+	ApplyBreachPointLayout();
+}
+
+void ATutorialDoorActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ApplyBreachPointLayout();
 }
 
 void ATutorialDoorActor::SetDoorState(ETutorialDoorState NewState)
@@ -67,6 +93,17 @@ void ATutorialDoorActor::BreachFrom(const FVector& BreacherLocation)
 {
 	SetDoorState(ETutorialDoorState::Breached);
 
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ATutorialInstructionActor> It(World); It; ++It)
+		{
+			if (ATutorialInstructionActor* Instruction = *It)
+			{
+				Instruction->NotifyDoorBreached(this);
+			}
+		}
+	}
+
 	if (!DoorMesh)
 	{
 		return;
@@ -84,4 +121,38 @@ void ATutorialDoorActor::BreachFrom(const FVector& BreacherLocation)
 
 	const FVector Impulse = Direction * BreachImpulse + FVector(0.0f, 0.0f, BreachUpImpulse);
 	DoorMesh->AddImpulse(Impulse, NAME_None, true);
+}
+
+FVector ATutorialDoorActor::GetBreachStandLocation(const FVector& BreacherLocation) const
+{
+	const FVector FrontLocation = FrontBreachStandPoint ? FrontBreachStandPoint->GetComponentLocation() : GetActorLocation() - GetActorForwardVector() * BreachStandDistance;
+	const FVector BackLocation = BackBreachStandPoint ? BackBreachStandPoint->GetComponentLocation() : GetActorLocation() + GetActorForwardVector() * BreachStandDistance;
+
+	return FVector::DistSquared2D(BreacherLocation, BackLocation) < FVector::DistSquared2D(BreacherLocation, FrontLocation)
+		? BackLocation
+		: FrontLocation;
+}
+
+bool ATutorialDoorActor::IsBreacherInsideBreachTrigger(const AActor* Breacher) const
+{
+	return Breacher && BreachTriggerBox && BreachTriggerBox->IsOverlappingActor(Breacher);
+}
+
+void ATutorialDoorActor::ApplyBreachPointLayout()
+{
+	if (FrontBreachStandPoint)
+	{
+		FrontBreachStandPoint->SetRelativeLocation(FVector(-BreachStandDistance, 0.0f, 0.0f));
+	}
+
+	if (BackBreachStandPoint)
+	{
+		BackBreachStandPoint->SetRelativeLocation(FVector(BreachStandDistance, 0.0f, 0.0f));
+	}
+
+	if (BreachTriggerBox)
+	{
+		BreachTriggerBox->SetBoxExtent(BreachTriggerExtent);
+		BreachTriggerBox->SetRelativeLocation(FVector::ZeroVector);
+	}
 }

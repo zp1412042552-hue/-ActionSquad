@@ -6,6 +6,7 @@
 
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class UBoxComponent;
 
 UENUM(BlueprintType)
 enum class ETutorialDoorState : uint8
@@ -23,11 +24,19 @@ class ACTIONSQUAD_API ATutorialDoorActor : public AActor
 public:
 	ATutorialDoorActor();
 
+	virtual void OnConstruction(const FTransform& Transform) override;
+
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Door")
 	void SetDoorState(ETutorialDoorState NewState);
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Door")
 	void BreachFrom(const FVector& BreacherLocation);
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Door")
+	FVector GetBreachStandLocation(const FVector& BreacherLocation) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Door")
+	bool IsBreacherInsideBreachTrigger(const AActor* Breacher) const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<USceneComponent> SceneRoot;
@@ -38,6 +47,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
 	TObjectPtr<UTextRenderComponent> DoorLabel;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<USceneComponent> FrontBreachStandPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<USceneComponent> BackBreachStandPoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
+	TObjectPtr<UBoxComponent> BreachTriggerBox;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Door")
 	ETutorialDoorState DoorState = ETutorialDoorState::Closed;
 
@@ -46,4 +64,13 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Door")
 	float BreachUpImpulse = 12000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Door")
+	float BreachStandDistance = 115.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Door")
+	FVector BreachTriggerExtent = FVector(150.0f, 190.0f, 130.0f);
+
+private:
+	void ApplyBreachPointLayout();
 };

@@ -37,6 +37,26 @@ FTransform ATutorialWeaponActor::GetMuzzleTransform() const
 	return MuzzlePoint ? MuzzlePoint->GetComponentTransform() : GetActorTransform();
 }
 
+FTransform ATutorialWeaponActor::GetFiringMuzzleTransform() const
+{
+	const FTransform MuzzleTransform = GetMuzzleTransform();
+	const FVector ReversedForward = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	if (ReversedForward.IsNearlyZero())
+	{
+		return MuzzleTransform;
+	}
+
+	const FVector OriginalUp = MuzzleTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
+	const FVector CorrectedUp = OriginalUp.IsNearlyZero() || FMath::Abs(FVector::DotProduct(OriginalUp, ReversedForward)) > 0.98f
+		? FVector::UpVector
+		: OriginalUp;
+
+	FTransform FiringTransform = MuzzleTransform;
+	FiringTransform.SetRotation(FRotationMatrix::MakeFromXZ(ReversedForward, CorrectedUp).ToQuat());
+	FiringTransform.NormalizeRotation();
+	return FiringTransform;
+}
+
 FTransform ATutorialWeaponActor::GetShellEjectionTransform() const
 {
 	return ShellEjectionPoint ? ShellEjectionPoint->GetComponentTransform() : GetMuzzleTransform();

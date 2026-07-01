@@ -227,7 +227,6 @@ private:
 	FName ResolveWeaponAttachSocket() const;
 	bool FireWeaponInDirection(const FVector& ShotDirection);
 	bool GetWeaponMuzzleTransform(FTransform& OutMuzzleTransform) const;
-	FTransform GetCorrectedWeaponMuzzleTransform(const FTransform& MuzzleTransform) const;
 	void SpawnWeaponMuzzleFlash(const FTransform& MuzzleTransform);
 	void SpawnWeaponBulletTracer(const FVector& StartLocation, const FVector& EndLocation);
 	void SpawnWeaponImpactEffect(const FHitResult& Hit, bool bCharacterImpact);

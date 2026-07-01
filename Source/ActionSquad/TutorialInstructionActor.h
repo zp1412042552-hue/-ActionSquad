@@ -6,6 +6,9 @@
 #include "TutorialInstructionActor.generated.h"
 
 class APlayerCameraManager;
+class ATutorialCompletionZoneActor;
+class ATutorialDoorActor;
+class ATutorialFloorMarkerActor;
 class ATutorialGestureDisplayActor;
 class UTutorialCommandWidget;
 class UWidgetComponent;
@@ -53,6 +56,15 @@ public:
 	void NotifyGesture(ECommandGesture Gesture);
 
 	UFUNCTION(BlueprintCallable, Category = "Action Squad|Tutorial")
+	void NotifyPlayerFiredWeapon();
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Tutorial")
+	void NotifyDoorBreached(ATutorialDoorActor* Door);
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Tutorial")
+	void NotifyPlayerEnteredCompletionZone(ATutorialCompletionZoneActor* Zone);
+
+	UFUNCTION(BlueprintCallable, Category = "Action Squad|Tutorial")
 	void SetCurrentStep(int32 StepIndex);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Action Squad|Components")
@@ -69,6 +81,21 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial")
 	TArray<FCommandTutorialStep> Steps;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialFloorMarkerActor> TeamAMarker;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialFloorMarkerActor> TeamBMarker;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialDoorActor> BreachDoor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial")
+	TObjectPtr<ATutorialCompletionZoneActor> CompletionZone;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial", meta = (ClampMin = "1.0", Units = "cm"))
+	float LocomotionTutorialForwardDistance = 80.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Layout")
 	FVector2D WidgetDrawSize = FVector2D(920.0f, 340.0f);
@@ -98,9 +125,13 @@ private:
 	void ApplyScreenLayout();
 	void ApplyCurrentStepToWidget();
 	void ResolveGestureDisplayActor();
+	void ResolveTutorialTargets();
+	void UpdateObjectiveProgress();
+	void CompleteTutorial();
 	void UpdateTransform(float DeltaSeconds);
 	void UpdateGestureDisplayTransform();
 	bool EnsureCamera();
+	bool IsStep(int32 StepIndex) const;
 
 	UPROPERTY()
 	TObjectPtr<UTutorialCommandWidget> CachedWidget;
@@ -108,5 +139,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<APlayerCameraManager> PlayerCameraManager;
 
+	FVector StepStartPlayerLocation = FVector::ZeroVector;
 	bool bHasInitialTransformLock = false;
+	bool bHasStepStartPlayerLocation = false;
 };

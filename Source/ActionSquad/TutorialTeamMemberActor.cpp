@@ -300,11 +300,10 @@ void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 		return;
 	}
 
-	const float DistanceSquared = FVector::DistSquared2D(GetActorLocation(), Door->GetActorLocation());
-	if (DistanceSquared > FMath::Square(DoorBreachDistance))
+	if (!Door->IsBreacherInsideBreachTrigger(this))
 	{
 		PendingBreachDoor = Door;
-		StartMoveToLocation(Door->GetActorLocation(), false);
+		StartMoveToLocation(Door->GetBreachStandLocation(GetActorLocation()), false);
 		return;
 	}
 
@@ -328,11 +327,10 @@ bool ATutorialTeamMemberActor::FireWeaponForward()
 		return false;
 	}
 
-	const FTransform CorrectedMuzzleTransform = GetCorrectedWeaponMuzzleTransform(MuzzleTransform);
-	FVector ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	FVector ShotDirection = MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
 	if (ShotDirection.IsNearlyZero())
 	{
-		ShotDirection = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+		ShotDirection = GetActorForwardVector();
 	}
 
 	return FireWeaponInDirection(ShotDirection);
@@ -346,11 +344,10 @@ bool ATutorialTeamMemberActor::FireWeaponAtLocation(const FVector& TargetLocatio
 		return false;
 	}
 
-	const FTransform CorrectedMuzzleTransform = GetCorrectedWeaponMuzzleTransform(MuzzleTransform);
-	FVector ShotDirection = (TargetLocation - CorrectedMuzzleTransform.GetLocation()).GetSafeNormal();
+	FVector ShotDirection = (TargetLocation - MuzzleTransform.GetLocation()).GetSafeNormal();
 	if (ShotDirection.IsNearlyZero())
 	{
-		ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+		ShotDirection = MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
 	}
 
 	return FireWeaponInDirection(ShotDirection);
@@ -509,18 +506,17 @@ bool ATutorialTeamMemberActor::FireWeaponInDirection(const FVector& InShotDirect
 		return false;
 	}
 
-	const FTransform CorrectedMuzzleTransform = GetCorrectedWeaponMuzzleTransform(MuzzleTransform);
 	FVector ShotDirection = InShotDirection.GetSafeNormal();
 	if (ShotDirection.IsNearlyZero())
 	{
-		ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+		ShotDirection = MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
 	}
 	if (ShotDirection.IsNearlyZero())
 	{
 		ShotDirection = GetActorForwardVector();
 	}
 
-	const FVector TraceStart = CorrectedMuzzleTransform.GetLocation();
+	const FVector TraceStart = MuzzleTransform.GetLocation();
 	const FVector TraceEnd = TraceStart + ShotDirection * WeaponRange;
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ActionSquadTeamWeaponTrace), true, this);
@@ -533,7 +529,7 @@ bool ATutorialTeamMemberActor::FireWeaponInDirection(const FVector& InShotDirect
 	const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
 	const FVector ShotEnd = bHit ? Hit.ImpactPoint : TraceEnd;
 
-	SpawnWeaponMuzzleFlash(CorrectedMuzzleTransform);
+	SpawnWeaponMuzzleFlash(MuzzleTransform);
 	SpawnWeaponBulletTracer(TraceStart, ShotEnd);
 
 	if (bHit)
@@ -567,27 +563,8 @@ bool ATutorialTeamMemberActor::GetWeaponMuzzleTransform(FTransform& OutMuzzleTra
 		return false;
 	}
 
-	OutMuzzleTransform = EquippedWeapon->GetMuzzleTransform();
+	OutMuzzleTransform = EquippedWeapon->GetFiringMuzzleTransform();
 	return true;
-}
-
-FTransform ATutorialTeamMemberActor::GetCorrectedWeaponMuzzleTransform(const FTransform& MuzzleTransform) const
-{
-	const FVector ReversedForward = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
-	if (ReversedForward.IsNearlyZero())
-	{
-		return MuzzleTransform;
-	}
-
-	const FVector OriginalUp = MuzzleTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
-	const FVector CorrectedUp = OriginalUp.IsNearlyZero() || FMath::Abs(FVector::DotProduct(OriginalUp, ReversedForward)) > 0.98f
-		? FVector::UpVector
-		: OriginalUp;
-
-	FTransform CorrectedTransform = MuzzleTransform;
-	CorrectedTransform.SetRotation(FRotationMatrix::MakeFromXZ(ReversedForward, CorrectedUp).ToQuat());
-	CorrectedTransform.NormalizeRotation();
-	return CorrectedTransform;
 }
 
 void ATutorialTeamMemberActor::SpawnWeaponMuzzleFlash(const FTransform& MuzzleTransform)
@@ -841,7 +818,7 @@ void ATutorialTeamMemberActor::FinishMoveCommand()
 	{
 		ATutorialDoorActor* DoorToBreach = PendingBreachDoor;
 		PendingBreachDoor = nullptr;
-		if (DoorToBreach && FVector::DistSquared2D(GetActorLocation(), DoorToBreach->GetActorLocation()) <= FMath::Square(DoorBreachDistance * 1.5f))
+		if (DoorToBreach && DoorToBreach->IsBreacherInsideBreachTrigger(this))
 		{
 			BreachDoor(DoorToBreach);
 			return;

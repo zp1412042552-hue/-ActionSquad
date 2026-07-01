@@ -19,6 +19,7 @@
 #include "TutorialBulletMarkActor.h"
 #include "TutorialInstructionActor.h"
 #include "TutorialDoorActor.h"
+#include "TutorialFloorMarkerActor.h"
 #include "TutorialShellCasingActor.h"
 #include "TutorialTeamMemberActor.h"
 #include "TutorialWeaponActor.h"
@@ -311,19 +312,13 @@ bool ATutorialPawn::FirePlayerWeapon()
 	{
 		return false;
 	}
-	const FTransform CorrectedMuzzleTransform = GetCorrectedPlayerWeaponMuzzleTransform(MuzzleTransform);
-
-	FVector ShotDirection = CorrectedMuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
+	FVector ShotDirection = MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
 	if (ShotDirection.IsNearlyZero())
 	{
-		ShotDirection = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
-		if (ShotDirection.IsNearlyZero())
-		{
-			ShotDirection = GetActorForwardVector();
-		}
+		ShotDirection = GetActorForwardVector();
 	}
 
-	const FVector TraceStart = CorrectedMuzzleTransform.GetLocation();
+	const FVector TraceStart = MuzzleTransform.GetLocation();
 	const FVector TraceEnd = TraceStart + ShotDirection * PlayerWeaponRange;
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ActionSquadPlayerWeaponTrace), true, this);
@@ -340,7 +335,7 @@ bool ATutorialPawn::FirePlayerWeapon()
 	const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
 	const FVector ShotEnd = bHit ? Hit.ImpactPoint : TraceEnd;
 
-	SpawnPlayerWeaponMuzzleFlash(CorrectedMuzzleTransform);
+	SpawnPlayerWeaponMuzzleFlash(MuzzleTransform);
 	SpawnPlayerWeaponBulletTracer(TraceStart, ShotEnd);
 	SpawnPlayerWeaponShellCasing(MuzzleTransform);
 
@@ -365,6 +360,10 @@ bool ATutorialPawn::FirePlayerWeapon()
 	}
 
 	LastPlayerWeaponFireTime = CurrentTime;
+	if (TutorialInstruction)
+	{
+		TutorialInstruction->NotifyPlayerFiredWeapon();
+	}
 	return true;
 }
 
@@ -529,7 +528,18 @@ bool ATutorialPawn::UpdateContinuousPointFollow(float DeltaSeconds, ESelectedTea
 	}
 
 	FVector ProjectedTargetLocation = Hit.ImpactPoint;
-	const bool bCanMoveToHit = ProjectCommandHitToNavigation(Hit, ProjectedTargetLocation);
+	const ATutorialFloorMarkerActor* HitMarker = Cast<ATutorialFloorMarkerActor>(Hit.GetActor());
+	const ATutorialDoorActor* HitDoor = Cast<ATutorialDoorActor>(Hit.GetActor());
+	const ATutorialTeamMemberActor* SelectedPreviewTeam = MarkerTarget == ESelectedTeamTarget::TeamA ? TeamA : TeamB;
+	const bool bCanMoveToHit = HitMarker || HitDoor ? true : ProjectCommandHitToNavigation(Hit, ProjectedTargetLocation);
+	if (HitMarker)
+	{
+		ProjectedTargetLocation = HitMarker->GetCommandLocation();
+	}
+	else if (HitDoor)
+	{
+		ProjectedTargetLocation = HitDoor->GetBreachStandLocation(SelectedPreviewTeam ? SelectedPreviewTeam->GetActorLocation() : GetActorLocation());
+	}
 	if (bDrawContinuousFollowAimLine && bHasAimRay && CommandAimVisual)
 	{
 		CommandAimVisual->ShowAim(MarkerTarget, AimStart, bCanMoveToHit ? ProjectedTargetLocation : Hit.ImpactPoint, bCanMoveToHit);
@@ -705,7 +715,9 @@ FVector ATutorialPawn::GetCommandAimDirection() const
 
 bool ATutorialPawn::IsCommandHitConfirmable(const FHitResult& Hit) const
 {
-	return Cast<ATutorialDoorActor>(Hit.GetActor()) != nullptr || IsWalkableCommandHit(Hit);
+	return Cast<ATutorialDoorActor>(Hit.GetActor()) != nullptr
+		|| Cast<ATutorialFloorMarkerActor>(Hit.GetActor()) != nullptr
+		|| IsWalkableCommandHit(Hit);
 }
 
 bool ATutorialPawn::IsWalkableCommandHit(const FHitResult& Hit) const
@@ -748,9 +760,16 @@ bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 	}
 
 	ATutorialDoorActor* HitDoor = Cast<ATutorialDoorActor>(Hit.GetActor());
-	if (!HitDoor && !IsWalkableCommandHit(Hit))
+	ATutorialFloorMarkerActor* HitMarker = Cast<ATutorialFloorMarkerActor>(Hit.GetActor());
+	if (!HitDoor && !HitMarker && !IsWalkableCommandHit(Hit))
 	{
 		return false;
+	}
+
+	FVector CommandLocation = Hit.ImpactPoint;
+	if (HitMarker)
+	{
+		CommandLocation = HitMarker->GetCommandLocation();
 	}
 
 	bool bIssuedCommand = false;
@@ -762,7 +781,7 @@ bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 		}
 		else
 		{
-			TeamA->MoveToCommandLocation(Hit.ImpactPoint);
+			TeamA->MoveToCommandLocation(CommandLocation);
 		}
 		bIssuedCommand = true;
 	}
@@ -775,7 +794,7 @@ bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 		}
 		else
 		{
-			TeamB->MoveToCommandLocation(Hit.ImpactPoint);
+			TeamB->MoveToCommandLocation(CommandLocation);
 		}
 		bIssuedCommand = true;
 	}
@@ -851,7 +870,7 @@ bool ATutorialPawn::GetPlayerWeaponMuzzleTransform(FTransform& OutMuzzleTransfor
 
 	if (bUseWeaponActorMuzzleForFiring && CurrentWeapon)
 	{
-		OutMuzzleTransform = CurrentWeapon->GetMuzzleTransform();
+		OutMuzzleTransform = CurrentWeapon->GetFiringMuzzleTransform();
 		return true;
 	}
 
@@ -863,30 +882,11 @@ bool ATutorialPawn::GetPlayerWeaponMuzzleTransform(FTransform& OutMuzzleTransfor
 
 	if (CurrentWeapon)
 	{
-		OutMuzzleTransform = CurrentWeapon->GetMuzzleTransform();
+		OutMuzzleTransform = CurrentWeapon->GetFiringMuzzleTransform();
 		return true;
 	}
 
 	return false;
-}
-
-FTransform ATutorialPawn::GetCorrectedPlayerWeaponMuzzleTransform(const FTransform& MuzzleTransform) const
-{
-	const FVector ReversedForward = -MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
-	if (ReversedForward.IsNearlyZero())
-	{
-		return MuzzleTransform;
-	}
-
-	const FVector OriginalUp = MuzzleTransform.GetUnitAxis(EAxis::Z).GetSafeNormal();
-	const FVector CorrectedUp = OriginalUp.IsNearlyZero() || FMath::Abs(FVector::DotProduct(OriginalUp, ReversedForward)) > 0.98f
-		? FVector::UpVector
-		: OriginalUp;
-
-	FTransform CorrectedTransform = MuzzleTransform;
-	CorrectedTransform.SetRotation(FRotationMatrix::MakeFromXZ(ReversedForward, CorrectedUp).ToQuat());
-	CorrectedTransform.NormalizeRotation();
-	return CorrectedTransform;
 }
 
 FTransform ATutorialPawn::GetPlayerWeaponShellEjectionTransform(const FTransform& MuzzleTransform) const
