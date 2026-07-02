@@ -12,6 +12,7 @@ class ATutorialFloorMarkerActor;
 class ATutorialGestureDisplayActor;
 class UTutorialCommandWidget;
 class UWidgetComponent;
+class USoundBase;
 
 USTRUCT(BlueprintType)
 struct FCommandTutorialStep
@@ -96,6 +97,30 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Tutorial", meta = (ClampMin = "1.0", Units = "cm"))
 	float LocomotionTutorialForwardDistance = 80.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> StepAdvanceSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> TutorialCompleteSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> TeamAArriveSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> TeamBArriveSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> PanelOpenSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> ObjectiveAppearSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> ObjectiveSuccessSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> CompletionZoneEnterSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Layout")
 	FVector2D WidgetDrawSize = FVector2D(920.0f, 340.0f);

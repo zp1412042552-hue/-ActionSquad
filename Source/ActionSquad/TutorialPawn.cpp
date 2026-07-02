@@ -26,6 +26,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/DamageType.h"
 #include "DrawDebugHelpers.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
 ATutorialPawn::ATutorialPawn()
@@ -98,6 +99,49 @@ ATutorialPawn::ATutorialPawn()
 	ShellCasingClass = ATutorialShellCasingActor::StaticClass();
 	BulletMarkClass = ATutorialBulletMarkActor::StaticClass();
 
+	static ConstructorHelpers::FObjectFinder<USoundBase> WeaponFireSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Weapon_Fire.AS_SFX_Weapon_Fire"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> SurfaceImpactSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Bullet_Surface.AS_SFX_Bullet_Surface"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> CharacterImpactSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Bullet_Character.AS_SFX_Bullet_Character"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> ShellSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Shell_Eject.AS_SFX_Shell_Eject"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> SelectASoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Command_Select_A.AS_SFX_Command_Select_A"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> SelectBSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Command_Select_B.AS_SFX_Command_Select_B"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> MoveIssuedSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Command_Move_Issue.AS_SFX_Command_Move_Issue"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> InvalidSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Command_Invalid.AS_SFX_Command_Invalid"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> LocomotionStartSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Locomotion_Start.AS_SFX_Locomotion_Start"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> LocomotionStopSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Locomotion_Stop.AS_SFX_Locomotion_Stop"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> HandTouchArmedSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Hand_Touch_Armed.AS_SFX_Hand_Touch_Armed"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> HandTouchResetSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Hand_Touch_Reset.AS_SFX_Hand_Touch_Reset"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> BulletTracerWhizSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Bullet_Tracer_Whiz.AS_SFX_Bullet_Tracer_Whiz"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> WeaponDryClickSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Weapon_Dry_Click.AS_SFX_Weapon_Dry_Click"));
+	PlayerWeaponFireSound = WeaponFireSoundAsset.Object;
+	PlayerWeaponSurfaceImpactSound = SurfaceImpactSoundAsset.Object;
+	PlayerWeaponCharacterImpactSound = CharacterImpactSoundAsset.Object;
+	PlayerWeaponShellSound = ShellSoundAsset.Object;
+	CommandSelectASound = SelectASoundAsset.Object;
+	CommandSelectBSound = SelectBSoundAsset.Object;
+	CommandMoveIssuedSound = MoveIssuedSoundAsset.Object;
+	CommandInvalidSound = InvalidSoundAsset.Object;
+	LocomotionStartSound = LocomotionStartSoundAsset.Object;
+	LocomotionStopSound = LocomotionStopSoundAsset.Object;
+	HandTouchArmedSound = HandTouchArmedSoundAsset.Object;
+	HandTouchResetSound = HandTouchResetSoundAsset.Object;
+	BulletTracerWhizSound = BulletTracerWhizSoundAsset.Object;
+	WeaponDryClickSound = WeaponDryClickSoundAsset.Object;
+
 	ConfigureHandVisuals();
 }
 
@@ -167,6 +211,18 @@ void ATutorialPawn::SelectTeam(ESelectedTeamTarget Target)
 	}
 
 	CurrentSelectedTeam = Target;
+
+	if (UWorld* World = GetWorld())
+	{
+		if (Target == ESelectedTeamTarget::TeamA && CommandSelectASound)
+		{
+			UGameplayStatics::PlaySound2D(World, CommandSelectASound);
+		}
+		else if (Target == ESelectedTeamTarget::TeamB && CommandSelectBSound)
+		{
+			UGameplayStatics::PlaySound2D(World, CommandSelectBSound);
+		}
+	}
 
 	if (TeamA)
 	{
@@ -298,18 +354,30 @@ bool ATutorialPawn::FirePlayerWeapon()
 	UWorld* World = GetWorld();
 	if (!World || !bEnablePlayerWeaponFire)
 	{
+		if (WeaponDryClickSound)
+		{
+			UGameplayStatics::PlaySound2D(this, WeaponDryClickSound);
+		}
 		return false;
 	}
 
 	const float CurrentTime = World->GetTimeSeconds();
 	if (CurrentTime - LastPlayerWeaponFireTime < PlayerWeaponFireInterval)
 	{
+		if (WeaponDryClickSound)
+		{
+			UGameplayStatics::PlaySound2D(World, WeaponDryClickSound, 0.35f);
+		}
 		return false;
 	}
 
 	FTransform MuzzleTransform;
 	if (!GetPlayerWeaponMuzzleTransform(MuzzleTransform))
 	{
+		if (WeaponDryClickSound)
+		{
+			UGameplayStatics::PlaySound2D(World, WeaponDryClickSound);
+		}
 		return false;
 	}
 	FVector ShotDirection = MuzzleTransform.GetUnitAxis(EAxis::X).GetSafeNormal();
@@ -338,6 +406,10 @@ bool ATutorialPawn::FirePlayerWeapon()
 	SpawnPlayerWeaponMuzzleFlash(MuzzleTransform);
 	SpawnPlayerWeaponBulletTracer(TraceStart, ShotEnd);
 	SpawnPlayerWeaponShellCasing(MuzzleTransform);
+	if (PlayerWeaponFireSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, PlayerWeaponFireSound, TraceStart);
+	}
 
 	if (bHit)
 	{
@@ -345,6 +417,10 @@ bool ATutorialPawn::FirePlayerWeapon()
 		const bool bBloodImpact = Cast<ATutorialTeamMemberActor>(HitActor) != nullptr;
 		SpawnPlayerWeaponImpactEffect(Hit, bBloodImpact);
 		SpawnPlayerWeaponBulletMark(Hit, bBloodImpact);
+		if (USoundBase* ImpactSound = bBloodImpact ? PlayerWeaponCharacterImpactSound.Get() : PlayerWeaponSurfaceImpactSound.Get())
+		{
+			UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, Hit.ImpactPoint);
+		}
 
 		if (HitActor && PlayerWeaponDamage > 0.0f)
 		{
@@ -763,6 +839,10 @@ bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 	ATutorialFloorMarkerActor* HitMarker = Cast<ATutorialFloorMarkerActor>(Hit.GetActor());
 	if (!HitDoor && !HitMarker && !IsWalkableCommandHit(Hit))
 	{
+		if (CommandInvalidSound)
+		{
+			UGameplayStatics::PlaySound2D(World, CommandInvalidSound);
+		}
 		return false;
 	}
 
@@ -797,6 +877,11 @@ bool ATutorialPawn::IssueCommandAtHit(const FHitResult& Hit)
 			TeamB->MoveToCommandLocation(CommandLocation);
 		}
 		bIssuedCommand = true;
+	}
+
+	if (bIssuedCommand && CommandMoveIssuedSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, CommandMoveIssuedSound, CommandLocation);
 	}
 
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
@@ -950,6 +1035,10 @@ void ATutorialPawn::SpawnPlayerWeaponBulletTracer(const FVector& StartLocation, 
 	{
 		Effect->ConfigureBulletTracer(StartLocation, EndLocation);
 	}
+	if (BulletTracerWhizSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, BulletTracerWhizSound, (StartLocation + EndLocation) * 0.5f, 0.35f);
+	}
 }
 
 void ATutorialPawn::SpawnPlayerWeaponImpactEffect(const FHitResult& Hit, bool bBloodImpact)
@@ -1006,6 +1095,10 @@ void ATutorialPawn::SpawnPlayerWeaponShellCasing(const FTransform& MuzzleTransfo
 	if (Casing)
 	{
 		Casing->LaunchShell(EjectionTransform, LinearVelocity, AngularVelocity);
+	}
+	if (PlayerWeaponShellSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, PlayerWeaponShellSound, EjectionTransform.GetLocation(), 0.55f);
 	}
 }
 
@@ -1100,12 +1193,20 @@ void ATutorialPawn::UpdateHandTouchFireInput(float DeltaSeconds)
 	const float ReleaseDistance = FMath::Max(TriggerDistance + 0.1f, HandTouchFireReleaseDistance);
 	if (bHandTouchFireArmed && ClosestDistance <= TriggerDistance)
 	{
+		if (HandTouchArmedSound)
+		{
+			UGameplayStatics::PlaySound2D(this, HandTouchArmedSound, 0.6f);
+		}
 		FirePlayerWeapon();
 		bHandTouchFireArmed = false;
 	}
 	else if (!bHandTouchFireArmed && ClosestDistance >= ReleaseDistance)
 	{
 		bHandTouchFireArmed = true;
+		if (HandTouchResetSound)
+		{
+			UGameplayStatics::PlaySound2D(this, HandTouchResetSound, 0.45f);
+		}
 	}
 }
 
@@ -1194,11 +1295,16 @@ bool ATutorialPawn::GetHandBoneLocations(const UOculusXRHandComponent* HandMesh,
 
 void ATutorialPawn::UpdateGunPitchLocomotion(float DeltaSeconds)
 {
+	const EGunPitchLocomotionState PreviousState = GunLocomotionState;
 	if (!bEnableGunPitchLocomotion)
 	{
 		GunLocomotionState = EGunPitchLocomotionState::Stopped;
 		GunLocomotionStartHoldTimer = 0.0f;
 		CurrentGunLocomotionSpeed = 0.0f;
+		if (PreviousState != EGunPitchLocomotionState::Stopped && LocomotionStopSound)
+		{
+			UGameplayStatics::PlaySound2D(this, LocomotionStopSound);
+		}
 		return;
 	}
 
@@ -1208,6 +1314,10 @@ void ATutorialPawn::UpdateGunPitchLocomotion(float DeltaSeconds)
 		GunLocomotionState = EGunPitchLocomotionState::Stopped;
 		GunLocomotionStartHoldTimer = 0.0f;
 		CurrentGunLocomotionSpeed = 0.0f;
+		if (PreviousState != EGunPitchLocomotionState::Stopped && LocomotionStopSound)
+		{
+			UGameplayStatics::PlaySound2D(this, LocomotionStopSound);
+		}
 		return;
 	}
 
@@ -1258,6 +1368,21 @@ void ATutorialPawn::UpdateGunPitchLocomotion(float DeltaSeconds)
 				GunLocomotionState = PendingState;
 				GunLocomotionStartHoldTimer = 0.0f;
 			}
+		}
+	}
+
+	if (GunLocomotionState != PreviousState)
+	{
+		if (GunLocomotionState == EGunPitchLocomotionState::Stopped)
+		{
+			if (LocomotionStopSound)
+			{
+				UGameplayStatics::PlaySound2D(this, LocomotionStopSound);
+			}
+		}
+		else if (LocomotionStartSound)
+		{
+			UGameplayStatics::PlaySound2D(this, LocomotionStartSound);
 		}
 	}
 

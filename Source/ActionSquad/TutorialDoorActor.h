@@ -7,6 +7,7 @@
 class UStaticMeshComponent;
 class UTextRenderComponent;
 class UBoxComponent;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class ETutorialDoorState : uint8
@@ -70,6 +71,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Door")
 	FVector BreachTriggerExtent = FVector(150.0f, 190.0f, 130.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> BreachSound;
 
 private:
 	void ApplyBreachPointLayout();

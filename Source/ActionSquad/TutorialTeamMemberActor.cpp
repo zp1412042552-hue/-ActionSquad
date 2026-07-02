@@ -16,6 +16,7 @@
 #include "TutorialDoorActor.h"
 #include "TutorialWeaponActor.h"
 #include "TimerManager.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
 ATutorialTeamMemberActor::ATutorialTeamMemberActor()
@@ -58,6 +59,31 @@ ATutorialTeamMemberActor::ATutorialTeamMemberActor()
 	BulletTracerEffectClass = ATutorialBallisticEffectActor::StaticClass();
 	ImpactEffectClass = ATutorialBallisticEffectActor::StaticClass();
 	BulletMarkClass = ATutorialBulletMarkActor::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> WeaponFireSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Weapon_Fire_Soft.AS_SFX_Weapon_Fire_Soft"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> SurfaceImpactSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Bullet_Surface.AS_SFX_Bullet_Surface"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> CharacterImpactSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Bullet_Character.AS_SFX_Bullet_Character"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> MoveStartSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Team_Move_Start.AS_SFX_Team_Move_Start"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> MoveStopSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Team_Move_Stop.AS_SFX_Team_Move_Stop"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> DoorTargetedSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Door_Targeted.AS_SFX_Door_Targeted"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> DoorBreachReadySoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Door_Breach_Ready.AS_SFX_Door_Breach_Ready"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> BulletTracerWhizSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Bullet_Tracer_Whiz.AS_SFX_Bullet_Tracer_Whiz"));
+	WeaponFireSound = WeaponFireSoundAsset.Object;
+	WeaponSurfaceImpactSound = SurfaceImpactSoundAsset.Object;
+	WeaponCharacterImpactSound = CharacterImpactSoundAsset.Object;
+	MoveStartSound = MoveStartSoundAsset.Object;
+	MoveStopSound = MoveStopSoundAsset.Object;
+	DoorTargetedSound = DoorTargetedSoundAsset.Object;
+	DoorBreachReadySound = DoorBreachReadySoundAsset.Object;
+	BulletTracerWhizSound = BulletTracerWhizSoundAsset.Object;
 
 	LoadDefaultAssets();
 }
@@ -224,6 +250,7 @@ void ATutorialTeamMemberActor::MoveToCommandLocation(const FVector& WorldLocatio
 
 void ATutorialTeamMemberActor::StopCommandMovement()
 {
+	const bool bWasMoving = bHasMoveTarget;
 	PendingBreachDoor = nullptr;
 	bHasMoveTarget = false;
 	LowSpeedMoveSeconds = 0.0f;
@@ -241,6 +268,10 @@ void ATutorialTeamMemberActor::StopCommandMovement()
 	if (!bDead)
 	{
 		PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+	}
+	if (bWasMoving && MoveStopSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, MoveStopSound, GetActorLocation());
 	}
 }
 
@@ -291,6 +322,10 @@ void ATutorialTeamMemberActor::StartMoveToLocation(const FVector& WorldLocation,
 	}
 
 	PlayTeamAnimation(ETeamMemberAnimState::Walk);
+	if (!bAlreadyMovingToCommand && MoveStartSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, MoveStartSound, GetActorLocation());
+	}
 }
 
 void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
@@ -303,6 +338,10 @@ void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 	if (!Door->IsBreacherInsideBreachTrigger(this))
 	{
 		PendingBreachDoor = Door;
+		if (DoorTargetedSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, DoorTargetedSound, Door->GetActorLocation());
+		}
 		StartMoveToLocation(Door->GetBreachStandLocation(GetActorLocation()), false);
 		return;
 	}
@@ -315,6 +354,10 @@ void ATutorialTeamMemberActor::BreachDoor(ATutorialDoorActor* Door)
 	bHasMoveTarget = false;
 	PendingBreachDoor = nullptr;
 	SetActorRotation((Door->GetActorLocation() - GetActorLocation()).Rotation());
+	if (DoorBreachReadySound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, DoorBreachReadySound, GetActorLocation());
+	}
 	PlayTeamAnimation(ETeamMemberAnimState::BreachKick);
 	Door->BreachFrom(GetActorLocation());
 }
@@ -531,6 +574,10 @@ bool ATutorialTeamMemberActor::FireWeaponInDirection(const FVector& InShotDirect
 
 	SpawnWeaponMuzzleFlash(MuzzleTransform);
 	SpawnWeaponBulletTracer(TraceStart, ShotEnd);
+	if (WeaponFireSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, WeaponFireSound, TraceStart);
+	}
 
 	if (bHit)
 	{
@@ -538,6 +585,10 @@ bool ATutorialTeamMemberActor::FireWeaponInDirection(const FVector& InShotDirect
 		const bool bCharacterImpact = Cast<APawn>(HitActor) != nullptr;
 		SpawnWeaponImpactEffect(Hit, bCharacterImpact);
 		SpawnWeaponBulletMark(Hit, bCharacterImpact);
+		if (USoundBase* ImpactSound = bCharacterImpact ? WeaponCharacterImpactSound.Get() : WeaponSurfaceImpactSound.Get())
+		{
+			UGameplayStatics::PlaySoundAtLocation(World, ImpactSound, Hit.ImpactPoint);
+		}
 
 		if (HitActor && WeaponDamage > 0.0f)
 		{
@@ -616,6 +667,10 @@ void ATutorialTeamMemberActor::SpawnWeaponBulletTracer(const FVector& StartLocat
 	if (Effect)
 	{
 		Effect->ConfigureBulletTracer(StartLocation, EndLocation);
+	}
+	if (BulletTracerWhizSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, BulletTracerWhizSound, (StartLocation + EndLocation) * 0.5f, 0.28f);
 	}
 }
 
@@ -826,6 +881,10 @@ void ATutorialTeamMemberActor::FinishMoveCommand()
 	}
 
 	PlayTeamAnimation(bSelected ? ETeamMemberAnimState::AlertIdle : ETeamMemberAnimState::RelaxedIdle);
+	if (MoveStopSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, MoveStopSound, GetActorLocation());
+	}
 }
 
 void ATutorialTeamMemberActor::UpdateMovementAnimation()

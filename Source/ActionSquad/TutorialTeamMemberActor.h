@@ -13,6 +13,7 @@ class ATutorialBulletMarkActor;
 class ATutorialWeaponActor;
 class UWidgetComponent;
 class UTeamNameplateWidget;
+class USoundBase;
 
 USTRUCT(BlueprintType)
 struct FTeamMemberAnimationSet
@@ -200,6 +201,30 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Weapon|FX", meta = (ClampMin = "0"))
 	int32 MaxWeaponBulletMarks = 64;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> WeaponFireSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> WeaponSurfaceImpactSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> WeaponCharacterImpactSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> MoveStartSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> MoveStopSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> DoorTargetedSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> DoorBreachReadySound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> BulletTracerWhizSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Animations")
 	FTeamMemberAnimationSet AnimationSet;

@@ -12,6 +12,8 @@
 #include "TutorialGestureDisplayActor.h"
 #include "TutorialPawn.h"
 #include "TutorialTeamMemberActor.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 ATutorialInstructionActor::ATutorialInstructionActor()
 {
@@ -32,6 +34,31 @@ ATutorialInstructionActor::ATutorialInstructionActor()
 
 	BuildDefaultSteps();
 	ApplyScreenLayout();
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> StepAdvanceSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Step_Advance.AS_SFX_Step_Advance"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> TutorialCompleteSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Tutorial_Complete.AS_SFX_Tutorial_Complete"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> TeamAArriveSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Marker_Arrive_A.AS_SFX_Marker_Arrive_A"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> TeamBArriveSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Marker_Arrive_B.AS_SFX_Marker_Arrive_B"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> PanelOpenSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_UI_Open.AS_SFX_UI_Open"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> ObjectiveAppearSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Objective_Appear.AS_SFX_Objective_Appear"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> ObjectiveSuccessSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Objective_Success.AS_SFX_Objective_Success"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> CompletionZoneEnterSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Completion_Zone_Enter.AS_SFX_Completion_Zone_Enter"));
+	StepAdvanceSound = StepAdvanceSoundAsset.Object;
+	TutorialCompleteSound = TutorialCompleteSoundAsset.Object;
+	TeamAArriveSound = TeamAArriveSoundAsset.Object;
+	TeamBArriveSound = TeamBArriveSoundAsset.Object;
+	PanelOpenSound = PanelOpenSoundAsset.Object;
+	ObjectiveAppearSound = ObjectiveAppearSoundAsset.Object;
+	ObjectiveSuccessSound = ObjectiveSuccessSoundAsset.Object;
+	CompletionZoneEnterSound = CompletionZoneEnterSoundAsset.Object;
 }
 
 void ATutorialInstructionActor::BeginPlay()
@@ -136,13 +163,19 @@ void ATutorialInstructionActor::NotifyPlayerEnteredCompletionZone(ATutorialCompl
 
 	if (!CompletionZone || CompletionZone == Zone)
 	{
+		if (CompletionZoneEnterSound && GetWorld())
+		{
+			UGameplayStatics::PlaySound2D(GetWorld(), CompletionZoneEnterSound);
+		}
 		CompleteTutorial();
 	}
 }
 
 void ATutorialInstructionActor::SetCurrentStep(int32 StepIndex)
 {
+	const int32 PreviousStepIndex = CurrentStepIndex;
 	CurrentStepIndex = Steps.IsValidIndex(StepIndex) ? StepIndex : INDEX_NONE;
+	const bool bChangedStep = CurrentStepIndex != PreviousStepIndex;
 	bHasStepStartPlayerLocation = false;
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0))
 	{
@@ -150,6 +183,31 @@ void ATutorialInstructionActor::SetCurrentStep(int32 StepIndex)
 		bHasStepStartPlayerLocation = true;
 	}
 	ApplyCurrentStepToWidget();
+	if (bChangedStep && GetWorld())
+	{
+		USoundBase* SoundToPlay = StepAdvanceSound;
+		if (CurrentStepIndex == 0)
+		{
+			SoundToPlay = PanelOpenSound ? PanelOpenSound.Get() : StepAdvanceSound.Get();
+		}
+		else if (CurrentStepIndex == 2)
+		{
+			SoundToPlay = TeamAArriveSound ? TeamAArriveSound.Get() : StepAdvanceSound.Get();
+		}
+		else if (CurrentStepIndex == 3)
+		{
+			SoundToPlay = TeamBArriveSound ? TeamBArriveSound.Get() : StepAdvanceSound.Get();
+		}
+
+		if (SoundToPlay)
+		{
+			UGameplayStatics::PlaySound2D(GetWorld(), SoundToPlay);
+		}
+		if (CurrentStepIndex > 0 && ObjectiveAppearSound)
+		{
+			UGameplayStatics::PlaySound2D(GetWorld(), ObjectiveAppearSound, 0.55f);
+		}
+	}
 }
 
 void ATutorialInstructionActor::BuildDefaultSteps()
@@ -412,6 +470,15 @@ void ATutorialInstructionActor::CompleteTutorial()
 	if (GestureDisplayActor)
 	{
 		GestureDisplayActor->SetActorHiddenInGame(true);
+	}
+
+	if (TutorialCompleteSound && GetWorld())
+	{
+		if (ObjectiveSuccessSound)
+		{
+			UGameplayStatics::PlaySound2D(GetWorld(), ObjectiveSuccessSound);
+		}
+		UGameplayStatics::PlaySound2D(GetWorld(), TutorialCompleteSound);
 	}
 
 	CurrentStepIndex = INDEX_NONE;

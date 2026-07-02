@@ -4,6 +4,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TutorialInstructionActor.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -27,6 +29,10 @@ ATutorialDoorActor::ATutorialDoorActor()
 		DoorMesh->SetRelativeScale3D(FVector(0.12f, 1.0f, 2.1f));
 		DoorMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 105.0f));
 	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> BreachSoundAsset(
+		TEXT("/Game/Audio/Tutorial/AS_SFX_Door_Breach_Kick.AS_SFX_Door_Breach_Kick"));
+	BreachSound = BreachSoundAsset.Object;
 
 	DoorLabel = CreateDefaultSubobject<UTextRenderComponent>(TEXT("DoorLabel"));
 	DoorLabel->SetupAttachment(SceneRoot);
@@ -91,7 +97,16 @@ void ATutorialDoorActor::SetDoorState(ETutorialDoorState NewState)
 
 void ATutorialDoorActor::BreachFrom(const FVector& BreacherLocation)
 {
+	if (DoorState == ETutorialDoorState::Breached)
+	{
+		return;
+	}
+
 	SetDoorState(ETutorialDoorState::Breached);
+	if (BreachSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, BreachSound, GetActorLocation());
+	}
 
 	if (UWorld* World = GetWorld())
 	{

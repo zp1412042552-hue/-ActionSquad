@@ -1,0 +1,33 @@
+asset_name,description,relative_path
+AS_SFX_Weapon_Fire,sharp tactical weapon shot,Audio/Tutorial/AS_SFX_Weapon_Fire.wav
+AS_SFX_Weapon_Fire_Soft,short soft close weapon shot,Audio/Tutorial/AS_SFX_Weapon_Fire_Soft.wav
+AS_SFX_Shell_Eject,brass shell casing eject and land,Audio/Tutorial/AS_SFX_Shell_Eject.wav
+AS_SFX_Bullet_Surface,bullet impact on concrete or metal,Audio/Tutorial/AS_SFX_Bullet_Surface.wav
+AS_SFX_Bullet_Character,stylized orange character impact,Audio/Tutorial/AS_SFX_Bullet_Character.wav
+AS_SFX_Command_Select_A,select teammate A bright cue,Audio/Tutorial/AS_SFX_Command_Select_A.wav
+AS_SFX_Command_Select_B,select teammate B warm cue,Audio/Tutorial/AS_SFX_Command_Select_B.wav
+AS_SFX_Command_Move_Issue,movement command accepted,Audio/Tutorial/AS_SFX_Command_Move_Issue.wav
+AS_SFX_Command_Invalid,invalid command rejected,Audio/Tutorial/AS_SFX_Command_Invalid.wav
+AS_SFX_Marker_Arrive_A,teammate A arrived marker,Audio/Tutorial/AS_SFX_Marker_Arrive_A.wav
+AS_SFX_Marker_Arrive_B,teammate B arrived marker,Audio/Tutorial/AS_SFX_Marker_Arrive_B.wav
+AS_SFX_Step_Advance,tutorial step completed,Audio/Tutorial/AS_SFX_Step_Advance.wav
+AS_SFX_Tutorial_Complete,tutorial complete confirmation,Audio/Tutorial/AS_SFX_Tutorial_Complete.wav
+AS_SFX_Door_Breach_Kick,door breach kick and metal fall,Audio/Tutorial/AS_SFX_Door_Breach_Kick.wav
+AS_SFX_Locomotion_Start,player locomotion start,Audio/Tutorial/AS_SFX_Locomotion_Start.wav
+AS_SFX_Locomotion_Stop,player locomotion stop,Audio/Tutorial/AS_SFX_Locomotion_Stop.wav
+AS_SFX_UI_Open,tutorial panel appears,Audio/Tutorial/AS_SFX_UI_Open.wav
+AS_SFX_UI_Confirm,small UI confirmation,Audio/Tutorial/AS_SFX_UI_Confirm.wav
+AS_SFX_Team_Selected,teammate selected shared cue,Audio/Tutorial/AS_SFX_Team_Selected.wav
+AS_SFX_Team_Move_Start,teammate starts moving,Audio/Tutorial/AS_SFX_Team_Move_Start.wav
+AS_SFX_Team_Move_Stop,teammate stops at destination,Audio/Tutorial/AS_SFX_Team_Move_Stop.wav
+AS_SFX_Door_Targeted,door command target locked,Audio/Tutorial/AS_SFX_Door_Targeted.wav
+AS_SFX_Door_Breach_Ready,teammate in breach position,Audio/Tutorial/AS_SFX_Door_Breach_Ready.wav
+AS_SFX_Hand_Touch_Armed,hands close enough to arm fire,Audio/Tutorial/AS_SFX_Hand_Touch_Armed.wav
+AS_SFX_Hand_Touch_Reset,hands separated and fire rearmed,Audio/Tutorial/AS_SFX_Hand_Touch_Reset.wav
+AS_SFX_Bullet_Tracer_Whiz,fast bullet tracer pass,Audio/Tutorial/AS_SFX_Bullet_Tracer_Whiz.wav
+AS_SFX_Objective_Appear,new objective appears,Audio/Tutorial/AS_SFX_Objective_Appear.wav
+AS_SFX_Objective_Success,objective success,Audio/Tutorial/AS_SFX_Objective_Success.wav
+AS_SFX_Completion_Zone_Enter,player enters completion zone,Audio/Tutorial/AS_SFX_Completion_Zone_Enter.wav
+AS_SFX_Weapon_Dry_Click,weapon dry mechanical click,Audio/Tutorial/AS_SFX_Weapon_Dry_Click.wav
+AS_SFX_Command_Rearm,same teammate command rearmed,Audio/Tutorial/AS_SFX_Command_Rearm.wav
+AS_Tutorial_Ambient_Loop,subtle tactical tutorial room ambience,Audio/Tutorial/AS_Tutorial_Ambient_Loop.wav

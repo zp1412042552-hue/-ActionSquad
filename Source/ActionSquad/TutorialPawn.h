@@ -19,6 +19,7 @@ class UCommandGestureComponent;
 class UMotionControllerComponent;
 class UOculusXRHandComponent;
 class UCapsuleComponent;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class EGunPitchLocomotionState : uint8
@@ -172,6 +173,48 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Weapon|FX")
 	FVector ShellEjectionAngularVelocityDegrees = FVector(900.0f, 120.0f, 520.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> PlayerWeaponFireSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> PlayerWeaponSurfaceImpactSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> PlayerWeaponCharacterImpactSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> PlayerWeaponShellSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> CommandSelectASound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> CommandSelectBSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> CommandMoveIssuedSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> CommandInvalidSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> LocomotionStartSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> LocomotionStopSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> HandTouchArmedSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> HandTouchResetSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> BulletTracerWhizSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Audio")
+	TObjectPtr<USoundBase> WeaponDryClickSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action Squad|Player Movement")
 	bool bEnableGunPitchLocomotion = true;
